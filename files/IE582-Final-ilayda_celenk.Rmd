@@ -1,0 +1,415 @@
+---
+title: "IE 582 - Final"
+author: "ilaydacelenk"
+date: "06/02/2021"
+output:
+  html_document:
+      toc: true
+      toc_depth: 3
+      number_sections: true
+      code_folding: hide
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, conflict=FALSE, warning=FALSE, message=FALSE, error = FALSE, comment = FALSE)
+```
+
+
+# Introduction
+
+Normally, models learn from single instances, on the other hand, in Multiple Instance Learning (MIL) the aim is to classify bags of
+instances. The aim of this Exam is to come up with two alternative bag-level representation approaches in MIL for a given data. The original data set that will be used can be found [here](https://archive.ics.uci.edu/ml/datasets/Musk+(Version+1)) and the updated version with bag classes and bag Id's can be found [here](https://raw.githubusercontent.com/BU-IE-582/fall20-ilaydacelenk/master/files/Musk1.csv). This data is created from 92 molecules of which 47 are musks and rest are not. Ultimate goal is to find a model to predict whether a molecule is musk or non-musk. After some manipulations, the data we have is created.
+
+I will be using the bag-level representations that I have suggested in my supervised training models in order to be able to make predictions on the bag classes. Afterwards, I will compare the representations along with the models using area under the ROC curve (AUC) based on 10-fold cross validation. 
+
+Since the task is to find a set of representative instances based on bags, the approach is called instance-based approach. 
+
+Libraries and dataset are imported.
+```{r libraries-data}
+library(skimr)
+library(dplyr)
+library(data.table)
+library(caret)
+library(glmnet)
+library(cvAUC)
+library(cluster)
+library(factoextra)
+library(TunePareto)
+library(rpart)
+
+musk_data <- read.csv("https://raw.githubusercontent.com/BU-IE-582/fall20-ilaydacelenk/master/files/Musk1.csv", header=FALSE)
+```
+
+Characteristics of the Musk dataset are given as follows:
+
+* Binary Classification 
+* `r ncol(musk_data)-2` Features
+* First Column is the Bag Class: Labeled V1
+* Second Column is the Bag ID: Labeled V2
+* All Numerical Features: From V3 to V168
+* Bag Classes: 0(negative), 1(positive)
+
+Using `skim` function, I observe that there is no NA values in this dataset and all attributes are numeric. 
+
+
+In MIL, bags are labeled as 0 if all the instances in this bag are 0 and bags are labeled as 1 if at least one of the instances in this bag is 1. For example, Bag 1 has 4 instances and we know that at least one of them is 1 and at most 3 of them are 0 in reality. Bag 50 is labeled as 0 and it has 2 instances, which means they are both 0 in reality. 
+
+
+Since I will be using distance, first I will scale the data. 
+
+```{r observations}
+skim(musk_data)
+
+#scale
+data <- musk_data
+data[,3:168] <- scale(data[,3:168])
+
+euclidean <- data %>% dist("euclidean") %>% as.matrix() %>% as.data.table()
+manhattan <- data %>% dist("manhattan") %>% as.matrix() %>% as.data.table()
+```
+
+I will be clustering the instances using K-medoids algorithm. This means number of clusters will be a parameter to tune. Optimum number of clusters can be found by `factoextra` package.
+
+Optimal number of clusters is found as 5. Then I will try to find the medoids using euclidean distance with 3 clusters then calculate the distances to medoids. The aim is to find the average distance between instances and centroids.
+
+
+```{r cluster_selection}
+xdata <- data[,3:168]
+fviz_nbclust(xdata, FUN = kmeans, method="wss")
+```
+
+
+## Euclidean Distance
+
+First, I will consider Euclidean distance. 
+
+```{r k-medoids-euc}
+medoid_euc <- pam(xdata, k=5, diss=FALSE, metric='euclidean')
+medoids_id<-medoid_euc$id.med
+med_distances <- c()
+
+for(i in 1:5){
+  med_distances<-cbind(med_distances,euclidean[,get(as.character(as.numeric(medoids_id[i])))])
+}
+med_distances <- med_distances %>% as.data.table(med_distances)
+setnames(med_distances, old=colnames(med_distances), new=c("C1","C2","C3","C4","C5")) #5 clusters
+med_bag <- cbind(musk_data[,1:2], med_distances) %>% as.data.table()
+bag_average <- med_bag %>% aggregate(., list(med_bag$V2), mean) %>% select(-Group.1) # now the columns represent the average distances to the center of the clusters
+print(head(bag_average))
+```
+
+## Manhattan Distance
+
+My second approach is to consider Manhattan distance. 
+
+```{r k-medoids_man}
+medoid_man <- pam(xdata, k=5, diss=FALSE, metric='manhattan')
+medoids_id<-medoid_euc$id.med
+med_distances <- c()
+
+for(i in 1:5){
+  med_distances<-cbind(med_distances,manhattan[,get(as.character(as.numeric(medoids_id[i])))])
+}
+med_distances <- med_distances %>% as.data.table(med_distances)
+setnames(med_distances, old=colnames(med_distances), new=c("C1","C2","C3","C4","C5")) #5 clusters
+med_bag <- cbind(musk_data[,1:2], med_distances) %>% as.data.table()
+bag_average2 <- med_bag %>% aggregate(., list(med_bag$V2), mean) %>% select(-Group.1) # now the columns represent the average distances to the center of the clusters
+print(head(bag_average2))
+```
+
+# Analysis
+
+## Euclidean Distance
+Decision Tree model with parameter tuning and 10-Fold Cross Validation is used to make predictions. The AUC is 1 and accuracy is also 1.
+
+```{r model_dt_euc}
+## Decision Tree MODEL
+
+trainn <- bag_average %>% select(-V2)
+X_train <- bag_average %>% select(-V1)
+y_train <- bag_average%>% select(V1) %>% as.factor()
+
+set.seed(1)
+complexity=c(0.01,0.03,0.05)
+min_number_of_observations=c(10,15,25)
+cv_summary=data.table()
+
+#for balanced folds: stratified =TRUE
+index <- generateCVRuns(trainn$V1, ntimes=5, nfold=10, stratified =TRUE)
+acc <- 0
+best_complexity <- 0
+best_min_number_of_observations <- 0
+for(i in 1:10){
+  for(c in complexity){
+    for(m in min_number_of_observations){
+      test_index <- index$`Run  1`[i]
+      train_cv <- trainn[-test_index[[1]],]
+      test_cv <- trainn[test_index[[1]],]
+      fitControl <- rpart.control(cp = c, minbucket = m)  
+      model_DT <- rpart(factor(V1)~., trainn, control=fitControl)
+      pred <- predict(model_DT, test_cv, type="class")
+      cm <- confusionMatrix(pred, factor(test_cv$V1))
+      acc_temp <- cm$overall[1:1]
+      auc_temp <- AUC(as.numeric(pred),as.numeric(test_cv$V1))
+      cv_summary <- rbind(cv_summary,data.table(Fold=i, Complexity=c, Min_Observations_per_Leaf=m, Accuracy=acc_temp, AUC=auc_temp))
+      if(acc_temp>acc){
+        acc<-acc_temp
+        best_complexity <- c
+        best_min_number_of_observations <- m
+        auc<-auc_temp
+      }
+    }
+  }
+}
+
+cv_summary <- cv_summary %>% group_by(Complexity, Min_Observations_per_Leaf) %>% summarise(mean_accuracy = mean(Accuracy), mean_AUC=mean(AUC))
+print(cv_summary)
+
+```
+
+Logistic Regression model with parameter tuning and 10-Fold Cross Validation is used to make predictions. The AUC is 1 and accuracy is also 1.
+
+```{r model_logreg_euc}
+## Logistic Regression MODEL
+
+
+set.seed(1)
+
+#for balanced folds: stratified =TRUE
+index <- generateCVRuns(trainn$V1, ntimes=5, nfold=10, stratified =TRUE)
+generate_lambda <- glmnet(as.matrix(trainn), trainn$V1, family="binomial", alpha = 1, nlambda=50, standardize = TRUE)
+lambdas <- generate_lambda$lambda
+cv_summary <- data.table()
+
+for(i in 1:10){
+  test_index <- index$`Run  1`[i]
+  train_cv <- trainn[-test_index[[1]],]
+  test_cv <- trainn[test_index[[1]],]
+  model_lr <- glmnet(as.matrix(trainn), as.factor(trainn$V1), family="binomial", alpha = 1,lambda=lambdas,standardize = TRUE)
+  pred <- predict(model_lr, as.matrix(test_cv), s = lambdas, type = "class")
+  pred <- pred[,2]
+  cm <- confusionMatrix(factor(pred), factor(test_cv$V1))
+  acc_temp <- cm$overall[1:1]
+  auc_temp <- AUC(as.numeric(pred),as.numeric(test_cv$V1))
+  cv_summary <- rbind(cv_summary,data.table(Fold=i, Accuracy=acc_temp, AUC=auc_temp))
+}
+
+print(cv_summary)
+
+```
+
+## Manhattan Distance
+
+Decision Tree model with parameter tuning and 10-Fold Cross Validation is used to make predictions. The AUC and Accuracy are almost 0.5. 
+
+```{r model_dt_man}
+## Decision Tree MODEL
+
+trainn2 <- bag_average2 %>% select(-V2)
+X_train <- bag_average2 %>% select(-V1)
+y_train <- bag_average2 %>% select(V1) %>% as.factor()
+
+set.seed(1)
+complexity=c(0.01,0.03,0.05)
+min_number_of_observations=c(10,15,25)
+cv_summary=data.table()
+
+#for balanced folds: stratified =TRUE
+index <- generateCVRuns(trainn$V1, ntimes=5, nfold=10, stratified =TRUE)
+acc <- 0
+best_complexity <- 0
+best_min_number_of_observations <- 0
+for(i in 1:10){
+  for(c in complexity){
+    for(m in min_number_of_observations){
+      test_index <- index$`Run  1`[i]
+      train_cv <- trainn2[-test_index[[1]],]
+      test_cv <- trainn2[test_index[[1]],]
+      fitControl <- rpart.control(cp = c, minbucket = m)  
+      model_DT <- rpart(factor(V1)~., trainn, control=fitControl)
+      pred <- predict(model_DT, test_cv, type="class")
+      cm <- confusionMatrix(pred, factor(test_cv$V1))
+      acc_temp <- cm$overall[1:1]
+      auc_temp <- AUC(as.numeric(pred),as.numeric(test_cv$V1))
+      cv_summary <- rbind(cv_summary,data.table(Fold=i, Complexity=c, Min_Observations_per_Leaf=m, Accuracy=acc_temp, AUC=auc_temp))
+      if(acc_temp>acc){
+        acc<-acc_temp
+        best_complexity <- c
+        best_min_number_of_observations <- m
+        auc<-auc_temp
+      }
+    }
+  }
+}
+
+cv_summary <- cv_summary %>% group_by(Complexity, Min_Observations_per_Leaf) %>% summarise(mean_accuracy = mean(Accuracy), mean_AUC=mean(AUC))
+print(cv_summary)
+
+```
+
+Logistic Regression model with parameter tuning and 10-Fold Cross Validation is used to make predictions. The AUC is 1 and accuracy is also 1.
+
+```{r model_logreg_man}
+## Logistic Regression MODEL
+
+set.seed(1)
+
+#for balanced folds: stratified =TRUE
+index <- generateCVRuns(trainn$V1, ntimes=5, nfold=10, stratified =TRUE)
+generate_lambda <- glmnet(as.matrix(trainn2), trainn2$V1, family="binomial", alpha = 1, nlambda=50, standardize = TRUE)
+lambdas <- generate_lambda$lambda
+cv_summary <- data.table()
+
+for(i in 1:10){
+  test_index <- index$`Run  1`[i]
+  train_cv <- trainn2[-test_index[[1]],]
+  test_cv <- trainn2[test_index[[1]],]
+  model_lr <- glmnet(as.matrix(trainn2), as.factor(trainn2$V1), family="binomial", alpha = 1, lambda=lambdas, standardize = TRUE)
+  pred <- predict(model_lr, as.matrix(test_cv), s = lambdas, type = "class")
+  pred <- pred[,2]
+  cm <- confusionMatrix(factor(pred), factor(test_cv$V1))
+  acc_temp <- cm$overall[1:1]
+  auc_temp <- AUC(as.numeric(pred),as.numeric(test_cv$V1))
+  cv_summary <- rbind(cv_summary,data.table(Fold=i, Accuracy=acc_temp, AUC=auc_temp))
+}
+
+print(cv_summary)
+
+```
+
+
+# Comparison
+
+I used Euclidean and Manhattan distance metrics for clustering, then I trained Decision Tree and Logistic Regression Models on the representative data with parameter tuning and 10-Fold Cross-Validation. All the models except Decision Tree for Manhattan distance, resulted in AUC as 1. Decision Tree for Manhattan distance resulted in AUC as almost 0.5. 
+
+# Conclusion
+
+In conclusion, cross validation results are very high and I would like to see how the models work on whole data to see if there is overfitting. But this is not desired as stated in the discussion board on Moodle.
+
+# Extra Model with Max Distance
+The following model is given as extra to show that I have tried other ways and did not succeed. This is not a good model since accuracy on train data is very high and accuracy on test data is very low which means there is overfitting. 
+
+Another method that I have tried was to select a representative instance from each bag considering the distances to other bags. I want the representative instance for a positive labeled bag to be far away from the negatives bags. So, for each instance in a bag, I will calculate the distances to all the negative bags and select the instance that is the farthest from the negatives bags. So I need an approach to decide on instance-bag distance. I will define it as the minimum distance between the selected instance and all the instances from the bag. 
+
+As an example consider Bag 1 with 4 instances which is labeled as positive. In order to find a representative instance for Bag 1, for each of the 4 instances, I will compute a distance vector to all the instances from the negative bags. Let N be the set of instances from negative bags. My aim is to find the instance in Bag 1 that is farthest from the elements of N. Then I will compare the 4 distances and select the one with the largest distance as the representative. 
+
+To be more clear, Bag 1 has 4 instances and labeled as 1, Bag 50 has 2 instances and labeled as 0. Let's call Bag 1 instances as b1-1, b1-2, b1-3, b1-4 and Bag 50 instances as b50-1, b50-2. Then, dist(b1-1,Bag 50)= min(dist(b1-1,b50-1), dist(b1-1,b50-2)) and dist(b1-1,N)=min(dist(b1-1,Bag i)) for all i. We find argmax(dist(b1-j,N)) for all j=1, 2, 3, 4 and it gives our representative.
+In summary, I will use Euclidean distance computing instance-instance and take the minimum of them for instance-bag and then take the minimum for instance-negative. This corresponds to argmax(dist(b1-i,N)) for all i. 
+
+The one with the largest instance-negative distance will be the representative. Instance-positive distances are calculated in the same manner.
+
+
+
+```{r max_distance}
+
+#scale
+musk <- musk_data
+musk[,3:168] <- scale(musk[,3:168])
+musk<- musk %>% mutate(instance = 1:n()) %>% select(instance, everything())
+
+#distance instance-instance
+ins_ins <- as.matrix(dist(musk[,4:169], method = "euclidean"))
+labeled_ins_ins <- cbind(musk[,1:3], ins_ins)
+
+#Bag ID's of class 0 bags
+ID_0 <- musk %>% filter(V1==0) %>% summarise(id=unique(V2)) %>% unlist() %>% as.numeric()
+#Bag ID's of class 1 bags
+ID_1 <- musk %>% filter(V1==1) %>% summarise(id=unique(V2)) %>% unlist() %>% as.numeric()
+
+#indices of class 0 instances
+ins_0 <- musk %>% filter(V1==0) %>% summarise(id=unique(instance)) %>% unlist() %>% as.numeric()
+#indices of class 1 instances
+ins_1 <- musk %>% filter(V1==1) %>% summarise(id=unique(instance)) %>% unlist() %>% as.numeric()
+
+# number of instances in each negative bag, 45 positive bags
+n_neg <- musk %>% filter(V1==0) %>% group_by(V2) %>% summarise(count=n())
+# number of instances in each positive bag, 47 positive bags
+n_pos <- musk %>% filter(V1==1) %>% group_by(V2) %>% summarise(count=n())
+#for 1(positive) bags 
+representative_indices_1 <- c()
+for (i in ID_1){
+  bag <- labeled_ins_ins %>% filter(V2==i) %>% select(ins_0+3) %>% t() %>% data.frame()
+  ind <- labeled_ins_ins %>% filter(V2==i) %>% summarise(id=unique(instance)) %>% unlist() %>% as.numeric()
+  min_dist = c()
+  for (j in 1:length(bag)){
+    x<-min(bag[[j]]) # her instance için min uzaklık bulduk
+    min_dist <- c(min_dist,x) # her bag için bir vektör bulduk
+  }
+  order <- rbind(ind, min_dist) %>% t() %>% data.frame() %>% arrange(desc(min_dist)) # sıraladık
+  representative_index <- order[1,1] #for each instance in a bag, there will be one representative index
+  representative_indices_1 <- c(representative_indices_1,representative_index)
+}
+representative_indices_1
+
+
+
+#for 0(negative) bags 
+representative_indices_0 <- c()
+for (i in ID_0){
+  bag <- labeled_ins_ins %>% filter(V2==i) %>% select(ins_1+3) %>% t() %>% data.frame()
+  ind <- labeled_ins_ins %>% filter(V2==i) %>% summarise(id=unique(instance)) %>% unlist() %>% as.numeric()
+  min_dist = c()
+  for (j in 1:length(bag)){
+    x<-min(bag[[j]]) # her instance için min uzaklık bulduk
+    min_dist <- c(min_dist,x) # her bag için bir vektör bulduk
+    order <- rbind(ind, min_dist) %>% t() %>% data.frame() %>% arrange(desc(min_dist)) # sıraladık
+    representative_index <- order[1,1] #for each instance in a bag, there will be one representative index
+  }
+  representative_indices_0 <- c(representative_indices_0,representative_index)
+}
+representative_indices_0
+
+
+representative_indices <- c(representative_indices_1, representative_indices_0)
+
+
+train <- musk[representative_indices, ] %>% select(-V2, -instance) %>% as.data.frame()
+test <- musk[-representative_indices, ] %>% select(-V2, -instance) %>% as.data.frame()
+
+Xtrain <- train %>% select(-V1)
+ytrain <- train %>% select(V1)
+Xtest <- test %>% select(-V1)
+ytest <- test %>% select(V1)
+
+
+set.seed(2)
+
+model_pra<-cv.glmnet(as.matrix(Xtrain), train$V1, type.measure = "class", family="binomial", nfolds=10)
+pred_pra <- predict(model_pra, newx=as.matrix(Xtest),s=c("lambda.min"), type = "class")
+
+cm_pra_test <- confusionMatrix(factor(pred_pra), factor(ytest$V1))
+cm_pra_test[["overall"]][["Accuracy"]]
+cm_pra_train <- confusionMatrix(factor(predict(model_pra, newx=as.matrix(Xtrain), s=c("lambda.min"), type = "class")), factor(train$V1))
+cm_pra_train[["overall"]][["Accuracy"]]
+
+print(model_pra)
+plot(model_pra)
+
+AUC(as.numeric(pred_pra),as.numeric(test$V1))
+
+
+
+nb <- c(3, 5, 7)
+knn_grid <- expand.grid(k = nb)
+
+fitControl <- trainControl(method = "repeatedcv", number = 10, repeats = 1, classProbs = FALSE, search="random")   
+model_knn <- train(factor(V1) ~ ., data = train, method = "knn", trControl = fitControl, tuneGrid = knn_grid)
+
+print(model_knn[["results"]])
+pred_knn <- predict(model_knn, newdata=Xtest)
+cm_knn_test <- confusionMatrix(factor(pred_knn), factor(test$V1))
+cm_knn_test[["overall"]][["Accuracy"]]
+cm_knn_train <- confusionMatrix(factor(predict(model_knn, newdata=Xtrain)), factor(train$V1))
+cm_knn_train[["overall"]][["Accuracy"]]
+
+AUC(as.numeric(pred_knn),as.numeric(test$V1))
+
+```
+
+
+This html file found [here](https://bu-ie-582.github.io/fall20-ilaydacelenk/files/IE582-Final-ilayda_celenk.html) and Rmd codes can be found [here](https://github.com/BU-IE-582/fall20-ilaydacelenk/blob/master/files/IE582-Final-ilayda_celenk.Rmd) as well. 
+
+
+
+
+

@@ -1,0 +1,822 @@
+---
+title: "IE 582 - Homework 4"
+author: "ilaydacelenk"
+output:
+  html_document:
+      toc: true
+      toc_depth: 3
+      number_sections: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, conflict=FALSE, warning=FALSE, message=FALSE, error = FALSE, comment = FALSE)
+```
+
+
+# Introduction
+
+The aim of this homework is to compare the performance of different machine learning algorithms such as Penalized Regression Approaches, Decision Trees, Support Vector Machines and Tree-Based Ensembles. Four datasets are selected for this purpose. 
+
+# Libraries
+We will use library caret as recommended in class with many other libraries.
+
+```{r libraries}
+#importing the libraries
+library(caret)
+library(dplyr)
+library(corrplot)
+library(data.table)
+library(glmnet)
+library(rpart)
+library(TunePareto)
+library(randomForest)
+library(tidyverse)
+library(ggplot2)
+```
+
+# Data Sets
+
+Four dataset from UCI and Kaggle are selected. Two of them have separate train and test data, and for the others I will generate train and test by splitting data with 20% test, using `createDataPartition` function of the package `caret`. All the test and train samples are larger than 200 and all the data sets have more than 20 features. Characteristics of the selected datasets are given as follows:
+
+* Optical Recognition of Handwritten Digits
+  + Multi-Class Classification 
+  + More than 50 features
+  + Only Numerical Features
+* Mushroom Types
+  + Binary Classification
+  + Only Categorical Features
+* Telco Customer Churn
+  + Binary Classification
+  + Class Imbalance
+  + Both Categorical and Numerical Features
+* House Prices
+  + Regression
+  + More than 50 Features
+  + Both Categorical and Numerical Features
+
+After reading and pre-processing the datasets, I will implement different approaches in order to make predictions and then I will compare their performances.
+
+# Approaches
+The following methods will be implemented in each dataset and their performances will be compared:
+
+* Penalized Regression Approaches (PRA)
+* Decision Trees (DT)
+* Random Forests (RF)
+* Stochastic gradient Boosting (SGB)
+* Support Vector Machines (SVM)
+
+# Optical Recognition of Handwritten Digits
+
+```{r digits}
+digits_test_raw <- read.csv("https://raw.githubusercontent.com/BU-IE-582/fall20-ilaydacelenk/master/files/HW4_data/digits_test", header=FALSE)
+digits_train_raw <- read.csv("https://raw.githubusercontent.com/BU-IE-582/fall20-ilaydacelenk/master/files/HW4_data/digits_train", header=FALSE)
+
+
+#read.csv("~/Desktop/projects/fall20-ilaydacelenk/files/HW4_data/digits_test", header=FALSE)
+
+digits_train <- digits_train_raw %>% select(-V1, -V40, -V33)
+digits_test <- digits_test_raw %>% select(-V1, -V40, -V33)
+
+X_digits_train <- digits_train %>% select(-V65) %>% scale()
+y_digits_train <- digits_train %>% mutate(V65=as.factor(V65)) %>% select(V65)
+X_digits_test <- digits_test %>% select(-V65) %>% scale()
+y_digits_test <- digits_test %>% mutate(V65=as.factor(V65)) %>% select(V65)
+#corrplot(cor(X_digits_train, method = c("pearson")))
+
+#after scaling, we can bind them again
+digits_train <- cbind(as.data.table(X_digits_train), y_digits_train)
+digits_test <- cbind(as.data.table(X_digits_test), y_digits_test)
+```
+
+Optical Recognition of Handwritten Digits dataset is used as a multi-class classification problem with `r digits_train_raw %>% select(V65) %>% n_distinct()` classes and it has more than 50 features. Here, the aim is to distinguish different handwritten digits. 
+For this data set, there are separate train and test samples. The data has `r ncol(digits_train_raw)` columns, where the first `r ncol(digits_train_raw)-1` columns are the independent variables and the last columns is the dependent variable. Train data has `r nrow(digits_train_raw)` instances and test data has `r nrow(digits_test_raw)` instances, both are greater than 200 as desired. Train data is collected from 30 people and test data is collected from 13 different people. All the dependent variables are discrete numeric in the range 0-16 and the dependent variable represents the digit class code which is 0-9. The predictors are created using normalized bitmaps. 
+
+When we plot the correlation matrix, we see that the corresponding values to column V1 and V40 are "?" on the matrix. Then we call summary function on `X_digits_train` and see that V1 and V40 columns are zero for all the instances. Therefore, we remove these columns. 
+
+33rd column of the test data is a zero column, therefore when it is scaled, it becomes NA. In order to apply the models, I will also remove it.  
+
+## Penalized Regression Approach
+
+```{r digits_PRA}
+set.seed(50)
+digits_model_pra<-cv.glmnet(as.matrix(X_digits_train), digits_train$V65, type.measure = "class", family="multinomial", nfolds=10)
+
+digits_pred_pra <- predict(digits_model_pra, newx=X_digits_test ,s=c("lambda.min"), type = "class")
+
+digits_cm_pra_test <- confusionMatrix(factor(digits_pred_pra), digits_test$V65)
+
+digits_cm_pra_train <- confusionMatrix(factor(predict(digits_model_pra, newx=X_digits_train ,s=c("lambda.min"), type = "class")), digits_train$V65)
+
+print(digits_model_pra)
+plot(digits_model_pra)
+```
+
+Lambda value that minimizes the error is `r digits_model_pra$lambda.min` with error rate 2.67%, the error rate on the test data is `r round((1-digits_cm_pra_test$overall[1:1])*100, 2)`% which is higher.
+
+Accuracy of the model on test data is `r round(digits_cm_pra_test$overall[1:1]*100, 2)`%. On the other hand, accuracy on the train data is `r round(digits_cm_pra_train$overall[1:1]*100, 2)`%. Those values are very close, therefore there is no significant overfitting. 
+
+Error rates on test and train data are `r round((1-digits_cm_pra_test$overall[1:1])*100, 2)`% and `r round((1-digits_cm_pra_train$overall[1:1])*100, 2)`%. 
+
+As a result, the model performs better on the train data which may indicate overfitting. 
+
+## Decision Tree
+
+```{r digits_DT}
+set.seed(50)
+complexity=c(0.01,0.03,0.05)
+min_number_of_observations=c(10,15,25)
+
+#for balanced folds: stratified =TRUE
+index <- generateCVRuns(digits_train$V65, ntimes=1, nfold=10, stratified =TRUE)
+acc <- 0
+best_complexity <- 0
+best_min_number_of_observations <- 0
+cv_summary=data.table()
+for(i in 1:10){
+  for(c in complexity){
+    for(m in min_number_of_observations){
+      test_index <- index$`Run  1`[i]
+      train_cv <- digits_train[-test_index[[1]],]
+      test_cv <- digits_train[test_index[[1]],]
+      fitControl <- rpart.control(cp = c, minbucket = m)  
+      digits_model_DT=rpart(V65~., digits_train, control=fitControl)
+      pred <- predict(digits_model_DT,data.frame(test_cv),type="class")
+      cm <- confusionMatrix(pred, test_cv$V65)
+      acc_temp <- cm$overall[1:1]
+      cv_summary <- rbind(cv_summary,data.table(Fold=i, Complexity=c, Min_Observations_per_Leaf=m, Accuracy=acc_temp))
+      if(acc_temp>acc){
+        acc<-acc_temp
+        best_complexity <- c
+        best_min_number_of_observations <- m
+      }
+    }
+  }
+}
+
+cv_summary <- cv_summary %>% group_by(Complexity, Min_Observations_per_Leaf) %>% summarise(mean_accuracy = mean(Accuracy))
+
+print(cv_summary)
+
+fitControl <- rpart.control(cp = best_complexity, minbucket = best_min_number_of_observations)
+digits_model_DT <- rpart(V65~., digits_train, control=fitControl)
+digits_pred_DT <- predict(digits_model_DT, data.frame(X_digits_test), type="class")
+digits_cm_DT_test <- confusionMatrix(factor(digits_pred_DT), digits_test$V65)
+
+digits_cm_DT_train <- confusionMatrix(factor(predict(digits_model_DT, data.frame(X_digits_train), type="class")), digits_train$V65)
+
+
+```
+
+According to the cross validation result, cross validation error rate is `r round((1-cv_summary[1,3])*100,2)`, the error rate on the test data is `r round((1-digits_cm_DT_test$overall[1:1])*100, 2)`% which is higher.
+
+The best complexity parameter is `r best_complexity` and the best minimal number of observations per tree leaf is `r best_min_number_of_observations` since it gives the highest accuracy of the model on cross validation test data with `r round(acc*100, 2)`%.
+
+Now I can fit the final model and make predictions. Accuracy of the final model on test data is `r round(digits_cm_DT_test$overall[1:1]*100, 2)`%. On the other hand, for the train data the accuracy is `r round(digits_cm_DT_train$overall[1:1]*100, 2)`%.
+
+Error rates on test and train data are `r round((1-digits_cm_DT_test$overall[1:1])*100, 2)`% and `r round((1-digits_cm_DT_train$overall[1:1])*100, 2)`%. 
+
+As a result, the model performs slightly better on the train data.
+
+
+## Random Forest
+
+```{r digits_RF}
+set.seed(50)
+m=c(4,6,8)
+#for balanced folds: stratified =TRUE
+# ntree is J=500 given in hw
+J=500 
+# the minimal number of observations per tree leaf is nodesize 5 given in hw
+min_size_of_terminal_nodes=5
+n_repeats=2
+n_folds=10
+fitControl=trainControl(method = "repeatedcv",
+                           number = n_folds,
+                           repeats = n_repeats)   
+rf_grid=expand.grid(mtry = m)
+                    
+digits_model_RF=train(V65 ~ ., data = data.frame(digits_train), method = "rf", trControl = fitControl, ntree=J, nodesize = min_size_of_terminal_nodes, tuneGrid = rf_grid)
+
+digits_pred_RF <- predict(digits_model_RF, newdata=X_digits_test)
+digits_cm_RF_test <- confusionMatrix(factor(digits_pred_RF), digits_test$V65)
+digits_cm_RF_train <- confusionMatrix(factor(predict(digits_model_RF, newdata=X_digits_train)), digits_train$V65)
+
+```
+
+The best mtry parameter is found as `r digits_model_RF[["finalModel"]][["mtry"]]`. I will fit the final model and make predictions setting mtry as `r digits_model_RF[["finalModel"]][["mtry"]]`. 
+
+Accuracy of the final model on test data is `r round(digits_cm_RF_test$overall[1:1]*100, 2)`%. On the other hand, for the train data the accuracy is `r round(digits_cm_RF_train$overall[1:1]*100, 2)`%.
+
+Error rates on test and train data are `r round((1-digits_cm_RF_test$overall[1:1])*100, 2)`% and `r round((1-digits_cm_RF_train$overall[1:1])*100, 2)`%. 
+
+As a result, the model accuracy is higher on the train data, almost 100%, which may indicate overfitting. 
+
+## Stochastic Gradient Boosting
+
+```{r digits_SGB}
+set.seed(50)
+n_folds <- 10
+fitControl <- trainControl(method = "cv", number = n_folds)  
+
+gbmGrid_forever <-  expand.grid(interaction.depth = c(1, 5, 7), n.trees = c(50,100,200), shrinkage = c(0.05, 0.1, 0.2), n.minobsinnode = c(10))
+
+print(gbmGrid_forever)
+
+gbmGrid <-  expand.grid(interaction.depth = c(5), n.trees = c(100), shrinkage = c(0.1), n.minobsinnode = c(10))
+
+#I got the error "V57 has no variation." Therefore I removed it from the train set
+digits_train2 <- digits_train %>% select(-V57)
+digits_model_sgb=train(V65 ~ ., data = data.frame(digits_train2), method = "gbm", trControl = fitControl, tuneGrid = gbmGrid_forever, verbose=F)
+
+digits_pred_sgb <- predict(digits_model_sgb, newdata=X_digits_test) %>% as.matrix()
+digits_cm_sgb_test <- confusionMatrix(factor(digits_pred_sgb), digits_test$V65)
+
+digits_cm_sgb_train <- confusionMatrix(factor(predict(digits_model_sgb, newdata=X_digits_train)), digits_train$V65)
+
+print(digits_model_sgb[["results"]])
+```
+
+Using `gbmGrid_forever` and keeping the minimal number of observations per tree leaf fixed as `r gbmGrid$n.minobsinnode`, optimal parameters are `r gbmGrid$interaction.depth`, `r gbmGrid$shrinkage` and `r gbmGrid$n.trees` respective to depth, learning rate and number of trees.
+
+Accuracy of the final model on test data is `r round(digits_cm_sgb_test$overall[1:1]*100, 2)`%. On the other hand, for the train data the accuracy is `r round(digits_cm_sgb_train$overall[1:1]*100, 2)`%. 
+
+Error rates on test and train data are `r round((1-digits_cm_sgb_test$overall[1:1])*100, 2)`% and `r round((1-digits_cm_sgb_train$overall[1:1])*100, 2)`%. 
+
+Again, the model accuracy is higher on the train data, almost 100%, which may indicate overfitting. 
+
+# Mushroom Types
+
+```{r mushroom}
+mushroom_raw <- read.csv("https://raw.githubusercontent.com/BU-IE-582/fall20-ilaydacelenk/master/files/HW4_data/mushroom",  header=FALSE)
+
+mushroom_colns <- c("class", "cap-shape", "cap-surface", "cap-color", "bruises", "odor", "gill-attachment", "gill-spacing", "gill-size", "gill-color", "stalk-shape", "stalk-root", "stalk-surface-above-ring", "stalk-surface-below-ring", "stalk-color-above-ring", "stalk-color-below-ring", "veil-type", "veil-color", "ring-number", "ring-type", "spore-print-color", "population", "habitat")
+colnames(mushroom_raw) <- mushroom_colns
+
+#Balanced binary classification
+mushroom_raw %>% group_by(class) %>% summarize(count=n()) 
+
+#veil-type is same for all the rows, therefore I will remove it
+mushroom_raw %>% summarise_all(n_distinct)
+mushroom_raw$`veil-type` <- NULL
+
+#no na values
+mushroom_raw %>% summarise_all(~ sum(is.na(.))) 
+mushroom_raw$class <- factor(mushroom_raw$class)
+
+cols <- names(mushroom_raw[c(2:22)])
+mushroom_raw[cols] <- lapply(mushroom_raw[cols], factor)
+#method='reference' so that n-1 dummy columns
+mushrooms_dummy <- mushroom_raw %>% mlr::createDummyFeatures(., method='reference')
+
+set.seed(50)
+train_inds_mushroom = createDataPartition(y = 1:nrow(mushroom_raw), p = 0.8, list = F)
+
+mushroom_train <- mushroom_raw[train_inds_mushroom, ] %>% as.data.frame()
+mushroom_test <- mushroom_raw[-train_inds_mushroom, ] %>% as.data.frame()
+
+mushroom_train_dummy <- mushrooms_dummy[train_inds_mushroom, ] %>% as.data.frame()
+mushroom_test_dummy <- mushrooms_dummy[-train_inds_mushroom, ] %>% as.data.frame()
+
+X_mushroom_train_dummy <- mushroom_train_dummy %>% select(-p)
+X_mushroom_test_dummy <- mushroom_test_dummy %>% select(-p)
+y_mushroom_train_dummy <- mushroom_train_dummy %>% select(p)
+y_mushroom_test_dummy <- mushroom_test_dummy %>% select(p)
+
+X_mushroom_train <- mushroom_train %>% select(-class)
+y_mushroom_train <- mushroom_train %>% select(class)
+X_mushroom_test <- mushroom_test %>% select(-class)
+y_mushroom_test <- mushroom_test %>% select(class)
+
+ggplot(mushroom_raw, aes(x=class )) + geom_bar(color="blue", fill=rgb(0.1,0.4,0.5,0.7) )
+
+```
+
+
+Mushroom Types dataset consists of descriptions of mushrooms from 23 species. This is a binary classification problem where we try to find if a mushroom is edible or poisonous. The first column corresponds to the target(dependent) variable and the rest of the columns are the predictors(independent variable). The feature "veil-type" is same for all the rows and it will not contribute in the model, therefore I will remove it.
+
+
+Here, there is no separate train and test data, therefore we need to generate them by using `createDataPartition` function of the package `caret`. I preferred to use 20% of the total data as the test data. Attribute information can be found [here](http://archive.ics.uci.edu/ml/datasets/Mushroom), such as color, size, shape, etc.
+All of the independent variables are categorical and they are all nominal. 
+
+Classes are denoted as "e" and "p", meaning edible and poisonous, respectively. We also see that classes are balanced.
+
+## Penalized Regression Approach
+```{r mushroom_PRA}
+set.seed(50)
+
+mushroom_model_pra<-cv.glmnet(as.matrix(X_mushroom_train_dummy), mushroom_train_dummy$p, type.measure = "class", family="binomial", nfolds=10)
+
+mushroom_pred_pra <- predict(mushroom_model_pra, newx=as.matrix(X_mushroom_test_dummy),s=c("lambda.min"), type = "class")
+
+mushroom_cm_pra_test <- confusionMatrix(factor(mushroom_pred_pra), factor(y_mushroom_test_dummy$p))
+
+mushroom_cm_pra_train <- confusionMatrix(factor(predict(mushroom_model_pra, newx=as.matrix(X_mushroom_train_dummy), s=c("lambda.min"), type = "class")), factor(y_mushroom_train_dummy$p))
+
+print(mushroom_model_pra)
+plot(mushroom_model_pra)
+```
+
+
+Lambda value that minimizes the error is `r mushroom_model_pra$lambda.min` with error rate 0%, the error rate on the test data is also `r round((1-mushroom_cm_pra_test$overall[1:1])*100, 2)`%. 
+
+Accuracy of the model on test data is `r round(mushroom_cm_pra_test$overall[1:1]*100, 2)`%. On the other hand, accuracy on the train data is `r round(mushroom_cm_pra_train$overall[1:1]*100, 2)`%. Both of them are 1, which seems like the perfect model but it is very unlikely. 
+
+Error rates on test and train data are `r round((1-mushroom_cm_pra_test$overall[1:1])*100, 2)`% and `r round((1-mushroom_cm_pra_train$overall[1:1])*100, 2)`%. 
+
+
+## Decision Tree
+```{r mushroom_DT}
+set.seed(50)
+complexity=c(0.01,0.03,0.05)
+min_number_of_observations=c(10,15,25)
+cv_summary=data.table()
+
+#for balanced folds: stratified =TRUE
+index <- generateCVRuns(mushroom_train$class, ntimes=1, nfold=10, stratified =TRUE)
+acc <- 0
+best_complexity <- 0
+best_min_number_of_observations <- 0
+for(i in 1:10){
+  for(c in complexity){
+    for(m in min_number_of_observations){
+      test_index <- index$`Run  1`[i]
+      train_cv <- mushroom_train[-test_index[[1]],]
+      test_cv <- mushroom_train[test_index[[1]],]
+      fitControl <- rpart.control(cp = c, minbucket = m)  
+      mushroom_model_DT=rpart(class~., mushroom_train, control=fitControl)
+      pred <- predict(mushroom_model_DT, test_cv, type="class")
+      cm <- confusionMatrix(pred, factor(test_cv$class))
+      acc_temp <- cm$overall[1:1]
+      cv_summary <- rbind(cv_summary,data.table(Fold=i, Complexity=c, Min_Observations_per_Leaf=m, Accuracy=acc_temp))
+      if(acc_temp>acc){
+        acc<-acc_temp
+        best_complexity <- c
+        best_min_number_of_observations <- m
+      }
+    }
+  }
+}
+
+cv_summary <- cv_summary %>% group_by(Complexity, Min_Observations_per_Leaf) %>% summarise(mean_accuracy = mean(Accuracy))
+print(cv_summary)
+
+fitControl <- rpart.control(cp = best_complexity, minbucket = best_min_number_of_observations)
+mushroom_model_DT <- rpart(class~., mushroom_train, control=fitControl)
+mushroom_pred_DT <- predict(mushroom_model_DT, X_mushroom_test, type="class")
+mushroom_cm_DT_test <- confusionMatrix(factor(mushroom_pred_DT), factor(mushroom_test$class))
+mushroom_cm_DT_train <- confusionMatrix(factor(predict(mushroom_model_DT, X_mushroom_train, type="class")), factor(mushroom_train$class))
+
+print(mushroom_cm_DT_test[["table"]])
+
+```
+
+According to the cross validation result, cross validation error rate is `r round((1-cv_summary[1,3])*100,2)`, the error rate on the test data is `r round((1-mushroom_cm_DT_test$overall[1:1])*100, 2)`% which is slightly higher but still both very low.
+
+The best complexity parameter is `r best_complexity` and the best minimal number of observations per tree leaf is `r best_min_number_of_observations` since it gives the highest accuracy of the model on cross validation test data with `r round(acc*100, 2)`%.
+
+Now I can fit the final model and make predictions. Accuracy of the final model on test data is `r round(mushroom_cm_DT_test$overall[1:1]*100, 2)`%. On the other hand, for the train data the accuracy is `r round(mushroom_cm_DT_train$overall[1:1]*100, 2)`%, which are very close and high. 
+
+Error rates on test and train data are `r round((1-mushroom_cm_DT_test$overall[1:1])*100, 2)`% and `r round((1-mushroom_cm_DT_train$overall[1:1])*100, 2)`%. 
+
+This indicates a good model. 
+
+## Random Forest
+```{r mushroom_RF}
+set.seed(50)
+m=c(4,6,8)
+#for balanced folds: stratified =TRUE
+# ntree is J=500 given in hw
+J=500 
+# the minimal number of observations per tree leaf is nodesize 5 given in hw
+min_size_of_terminal_nodes=5
+n_folds=10
+fitControl=trainControl(method = "repeatedcv",
+                           number = n_folds,
+                           repeats = 1, classProbs = TRUE, search="random")   
+rf_grid=expand.grid(mtry = m)
+
+mushroom_model_RF <- train(class ~ ., data = mushroom_train, method = "rf", trControl = fitControl, ntree=J, nodesize = min_size_of_terminal_nodes, tuneGrid = rf_grid)
+
+print(mushroom_model_RF[["results"]])
+
+mushroom_pred_RF <- predict(mushroom_model_RF, newdata=X_mushroom_test)
+mushroom_cm_RF_test <- confusionMatrix(factor(mushroom_pred_RF), mushroom_test$class)
+mushroom_cm_RF_train <- confusionMatrix(factor(predict(mushroom_model_RF, newdata=X_mushroom_train)), mushroom_train$class)
+
+print(mushroom_cm_RF_test[["table"]])
+```
+
+According to the repeated cross validation result, the best m parameter is `r mushroom_model_RF[["finalModel"]][["mtry"]]` since it gives the highest accuracy `r max(mushroom_model_RF[["results"]][["Accuracy"]])*100`% of the model on cross validation test data. 
+
+Accuracy of the final model on test data is `r round(mushroom_cm_RF_test$overall[1:1]*100, 2)`%. On the other hand, for the train data the accuracy is `r round(mushroom_cm_RF_train$overall[1:1]*100, 2)`%. Both are 1, this is not realistic.
+
+Error rates on test and train data are `r round((1-mushroom_cm_RF_test$overall[1:1])*100, 2)`% and `r round((1-mushroom_cm_RF_train$overall[1:1])*100, 2)`%. 
+
+## Stochastic Gradient Boosting
+```{r mushroom_SGB}
+set.seed(50)
+n_folds <- 10
+fitControl <- trainControl(method = "cv", number = n_folds)  
+
+gbmGrid_forever <-  expand.grid(interaction.depth = c(1, 5, 7), n.trees = c(50,100,200), shrinkage = c(0.05, 0.1, 0.2), n.minobsinnode = c(10))
+
+print(gbmGrid_forever)
+
+gbmGrid <-  expand.grid(interaction.depth = c(5), n.trees = c(100), shrinkage = c(0.1), n.minobsinnode = c(10))
+
+mushroom_train_dummy$p <- factor(mushroom_train_dummy$p)
+
+mushroom_model_sgb=train(p ~ ., data = data.frame(mushroom_train_dummy), method = "gbm", trControl = fitControl, tuneGrid = gbmGrid_forever, verbose=F)
+
+mushroom_pred_sgb <- predict(mushroom_model_sgb, newdata=X_mushroom_test_dummy) %>% as.matrix()
+
+mushroom_cm_sgb_test <- confusionMatrix(factor(mushroom_pred_sgb), factor(y_mushroom_test_dummy$p))
+
+mushroom_cm_sgb_train <- confusionMatrix(factor(predict(mushroom_model_sgb, newdata=X_mushroom_train_dummy)), factor(y_mushroom_train_dummy$p))
+
+print(mushroom_model_sgb[["results"]])
+```
+
+Using `gbmGrid_forever` and keeping the minimal number of observations per tree leaf fixed as `r gbmGrid$n.minobsinnode`, optimal parameters are `r gbmGrid$interaction.depth`, `r gbmGrid$shrinkage` and `r gbmGrid$n.trees` respective to depth, learning rate and number of trees.
+
+Accuracy of the final model on test data is `r round(mushroom_cm_sgb_test$overall[1:1]*100, 2)`%. On the other hand, for the train data the accuracy is `r round(mushroom_cm_sgb_train$overall[1:1]*100, 2)`%. Both accuracies are 1, similar to the other methods.
+
+# Telco Customer Churn
+
+```{r churn}
+churn_raw <- read.csv("https://raw.githubusercontent.com/BU-IE-582/fall20-ilaydacelenk/master/files/HW4_data/churn.csv")
+
+#to see the imbalance
+ggplot(churn_raw, aes(x=Churn )) + geom_bar(color="blue", fill=rgb(0.1,0.4,0.5,0.7) )
+
+#customer id is unie for every row, so I will remove it
+churn_raw$customerID <- NULL
+churn_raw %>% summarise_all(~ sum(is.na(.))) #to check na values
+#remove na
+churn_raw <- churn_raw %>% drop_na()
+
+var_mode <- sapply(churn_raw, mode)
+# find character columns
+colns <- which(var_mode %in% c("character"))
+# character to factor
+churn_raw[colns] <- lapply(churn_raw[colns], factor)
+glimpse(churn_raw)
+
+#This time I used caret's function to create dummy variables because mlr's function changed the column names in a very complicated way
+create_dummy <- dummyVars("~ .", data=churn_raw, fullRank = T)
+churn_dummy = data.frame(predict(create_dummy, newdata = churn_raw))
+churn_dummy$Churn.Yes <- as.factor(churn_dummy$Churn.Yes)
+
+set.seed(50)
+train_inds_churn = createDataPartition(y = 1:nrow(churn_dummy), p = 0.8, list = F)
+churn_train_dummy <- churn_dummy[train_inds_churn, ]
+churn_test_dummy <- churn_dummy[-train_inds_churn, ]
+
+churn_train_dummy_smoted <- DMwR::SMOTE(Churn.Yes ~ ., churn_train_dummy, perc.over = 100, perc.under=200)
+ggplot(churn_train_dummy_smoted, aes(x=Churn.Yes)) + geom_bar(color="blue", fill=rgb(0.1,0.4,0.5,0.7))
+levels(churn_train_dummy_smoted$Churn.Yes) <- c("NO", "YES")
+levels(churn_test_dummy$Churn.Yes) <- c("NO", "YES")
+levels(churn_train_dummy$Churn.Yes) <- c("NO", "YES")
+
+#model using the smote data and make predictions on non-smoted test data
+# also validate using non-smote train data
+X_churn_train_dummy_smoted <- churn_train_dummy_smoted %>% select(-Churn.Yes)
+y_churn_train_dummy_smoted <- churn_train_dummy_smoted %>% select(Churn.Yes)
+X_churn_train_dummy <- churn_train_dummy %>% select(-Churn.Yes)
+y_churn_train_dummy <- churn_train_dummy %>% select(Churn.Yes)
+X_churn_test_dummy <- churn_test_dummy %>% select(-Churn.Yes)
+y_churn_test_dummy <- churn_test_dummy %>% select(Churn.Yes)
+```
+
+Telco Customer Churn data contains information on customers churned and not churned. Therefore, it is a binary classification problem. There are `r nrow(churn_raw)` instances with `r churn_raw %>% filter(Churn=="Yes") %>% summarize(count=n())` customers have churned and `r churn_raw %>% filter(Churn=="No") %>% summarize(count=n())` customers have not churned. Therefore, the data is imbalanced since only `r churn_raw %>% filter(Churn=="Yes") %>% summarize(churn_ratio=round(100*n()/nrow(churn_raw)))`% of the data is class of churned.
+
+There are 21 columns and some features are numerical, some are categorical. Again, there is no separate train and test data, I use 20% of the data for test. 
+
+We see that classes are imbalanced. Therefore I use `smote` function in order to balance the classes. This function does oversampling in other words it creates more samples from the minority class. 
+For the models below, I used smote data for the fitting the model and then performed on the non-smote train and test data. 
+
+
+## Penalized Regression Approach
+```{r churn_PRA}
+set.seed(50)
+
+churn_model_pra<-cv.glmnet(as.matrix(X_churn_train_dummy_smoted), churn_train_dummy_smoted$Churn.Yes, type.measure = "class", family="binomial", nfolds=10)
+
+print(churn_model_pra)
+
+churn_pred_pra <- predict(churn_model_pra, newx=as.matrix(X_churn_test_dummy),s=c("lambda.min"), type = "class")
+
+churn_cm_pra_test <- confusionMatrix(factor(churn_pred_pra), factor(y_churn_test_dummy$Churn.Yes))
+
+churn_cm_pra_train <- confusionMatrix(factor(predict(churn_model_pra, newx=as.matrix(X_churn_train_dummy), s=c("lambda.min"), type = "class")), factor(y_churn_train_dummy$Churn.Yes))
+
+print(churn_model_pra)
+plot(churn_model_pra)
+```
+
+Lambda value that minimizes the error is `r churn_model_pra$lambda.min` with error rate 22.69% on the cross validation data, the error rate on the test data is `r round((1-churn_cm_pra_test$overall[1:1])*100, 2)`% which is higher.
+
+Accuracy of the model on non-smote test data is `r round(churn_cm_pra_test$overall[1:1]*100, 2)`%. On the other hand, accuracy on the non-smote train data is `r round(churn_cm_pra_train$overall[1:1]*100, 2)`%. Accuracy on the test data is larger, this means that the model is not memorizing i.e there is no overfitting. 
+
+Error rates on test and train data are `r round((1-churn_cm_pra_test$overall[1:1])*100, 2)`% and `r round((1-churn_cm_pra_train$overall[1:1])*100, 2)`%. 
+
+Since the accuracy of test and train data very close, there is no overfitting. But still the accuracy is not good enough. 
+
+## Decision Tree
+```{r churn_DT}
+set.seed(50)
+complexity=c(0.01,0.03,0.05)
+min_number_of_observations=c(10,15,25)
+cv_summary=data.table()
+
+#for balanced folds: stratified =TRUE
+index <- generateCVRuns(churn_train_dummy_smoted$Churn.Yes, ntimes=1, nfold=10, stratified =TRUE)
+acc <- 0
+best_complexity <- 0
+best_min_number_of_observations <- 0
+for(i in 1:10){
+  for(c in complexity){
+    for(m in min_number_of_observations){
+      test_index <- index$`Run  1`[i]
+      train_cv <- churn_train_dummy_smoted[-test_index[[1]],]
+      test_cv <- churn_train_dummy_smoted[test_index[[1]],]
+      fitControl <- rpart.control(cp = c, minbucket = m)  
+      churn_model_DT=rpart(Churn.Yes~., churn_train_dummy_smoted, control=fitControl)
+      pred <- predict(churn_model_DT, test_cv, type="class")
+      cm <- confusionMatrix(pred, factor(test_cv$Churn.Yes))
+      acc_temp <- cm$overall[1:1]
+      cv_summary <- rbind(cv_summary,data.table(Fold=i, Complexity=c, Min_Observations_per_Leaf=m, Accuracy=acc_temp))
+
+      if(acc_temp>acc){
+        acc<-acc_temp
+        best_complexity <- c
+        best_min_number_of_observations <- m
+      }
+    }
+  }
+}
+cv_summary <- cv_summary %>% group_by(Complexity, Min_Observations_per_Leaf) %>% summarise(mean_accuracy = mean(Accuracy))
+print(cv_summary)
+
+fitControl <- rpart.control(cp = best_complexity, minbucket = best_min_number_of_observations)
+churn_model_DT <- rpart(Churn.Yes~., churn_train_dummy_smoted, control=fitControl)
+churn_pred_DT <- predict(churn_model_DT, X_churn_test_dummy, type="class")
+churn_cm_DT_test <- confusionMatrix(factor(churn_pred_DT), factor(y_churn_test_dummy$Churn.Yes))
+churn_cm_DT_train <- confusionMatrix(factor(predict(churn_model_DT, X_churn_train_dummy, type="class")), factor(y_churn_train_dummy$Churn.Yes))
+
+print(churn_cm_DT_test[["table"]])
+```
+
+According to the cross validation result, the best complexity parameter is `r best_complexity` and the best minimal number of observations per tree leaf is `r best_min_number_of_observations` since it gives the highest accuracy of the model on cross validation test data with `r round(acc*100, 2)`%.
+
+Now I can fit the final model and make predictions. Accuracy of the final model on test data is `r round(churn_cm_DT_test$overall[1:1]*100, 2)`%. On the other hand, for the train data the accuracy is `r round(churn_cm_DT_train$overall[1:1]*100, 2)`%. Accuracy values for the non-smote test and train data are very close to each other. So there is no overfitting. But the cross validation results suggested `r round(acc*100, 2)`% accuracy on the smote train data. So we can say that the model is not learning enough and there is no overfitting.  
+
+Error rates on test and train data are `r round((1-churn_cm_DT_test$overall[1:1])*100, 2)`% and `r round((1-churn_cm_DT_train$overall[1:1])*100, 2)`%. 
+
+## Random Forest
+```{r churn_RF}
+set.seed(50)
+m=c(4,6,8)
+#for balanced folds: stratified =TRUE
+# ntree is J=500 given in hw
+J=500 
+# the minimal number of observations per tree leaf is nodesize 5 given in hw
+min_size_of_terminal_nodes=5
+n_folds=10
+fitControl=trainControl(method = "repeatedcv", number = n_folds, repeats = 1, classProbs = TRUE, search="random", savePred=TRUE)   
+rf_grid=expand.grid(mtry = m)
+
+churn_model_RF <- train(Churn.Yes ~ ., data = churn_train_dummy_smoted, method = "rf", trControl = fitControl, ntree=J, nodesize = min_size_of_terminal_nodes, tuneGrid = rf_grid)
+
+print(churn_model_RF[["results"]])
+
+churn_pred_RF <- predict(churn_model_RF, newdata=X_churn_test_dummy)
+churn_cm_RF_test <- confusionMatrix(factor(churn_pred_RF), churn_test_dummy$Churn.Yes)
+churn_cm_RF_train <- confusionMatrix(factor(predict(churn_model_RF, newdata=X_churn_train_dummy)), churn_train_dummy$Churn.Yes)
+
+print(churn_cm_RF_test[["table"]])
+```
+
+According to the repeated cross validation result, the best m parameter is `r churn_model_RF[["finalModel"]][["mtry"]]` since it gives the highest accuracy of the model on cross validation test data. 
+
+Accuracy of the final model on test data is `r round(churn_cm_RF_test$overall[1:1]*100, 2)`%. On the other hand, for the train data the accuracy is `r round(churn_cm_RF_train$overall[1:1]*100, 2)`%.
+
+Error rates on test and train data are `r round((1-churn_cm_RF_test$overall[1:1])*100, 2)`% and `r round((1-churn_cm_RF_train$overall[1:1])*100, 2)`%. 
+
+The model is performing better on the train set. Therefore, there is significant overfitting in the model. 
+
+## Stochastic Gradient Boosting
+```{r churn_SGB}
+set.seed(50)
+n_folds <- 10
+fitControl <- trainControl(method = "cv", number = n_folds)  
+
+gbmGrid_forever <-  expand.grid(interaction.depth = c(1, 5, 7), n.trees = c(50,100,200), shrinkage = c(0.05, 0.1, 0.2), n.minobsinnode = c(10))
+
+gbmGrid <-  expand.grid(interaction.depth = c(5), n.trees = c(100), shrinkage = c(0.1), n.minobsinnode = c(10))
+
+churn_model_sgb=train(Churn.Yes ~ ., data = data.frame(churn_train_dummy_smoted), method = "gbm", trControl = fitControl, tuneGrid = gbmGrid_forever, verbose=F)
+
+churn_pred_sgb <- predict(churn_model_sgb, newdata=X_churn_test_dummy) %>% as.matrix()
+
+churn_cm_sgb_test <- confusionMatrix(factor(churn_pred_sgb), factor(y_churn_test_dummy$Churn.Yes))
+
+churn_cm_sgb_train <- confusionMatrix(factor(predict(churn_model_sgb, newdata=X_churn_train_dummy)), factor(y_churn_train_dummy$Churn.Yes))
+
+print(churn_model_sgb[["results"]])
+```
+
+Using `gbmGrid_forever` and keeping the minimal number of observations per tree leaf fixed as `r gbmGrid$n.minobsinnode`, optimal parameters are `r gbmGrid$interaction.depth`, `r gbmGrid$shrinkage` and `r gbmGrid$n.trees` respective to depth, learning rate and number of trees.
+
+Accuracy of the final model on test data is `r round(churn_cm_sgb_test$overall[1:1]*100, 2)`%. On the other hand, for the train data the accuracy is `r round(churn_cm_sgb_train$overall[1:1]*100, 2)`%. The model performs better on the train data, which may indicate overfitting. 
+
+# House Prices
+
+```{r houseprice}
+houseprice_raw <- read.csv("https://raw.githubusercontent.com/BU-IE-582/fall20-ilaydacelenk/master/files/HW4_data/house_price_train.csv")
+
+houseprice <- houseprice_raw
+houseprice$Alley[is.na(houseprice$Alley)] <- "none"
+houseprice$FireplaceQu[is.na(houseprice$FireplaceQu)] <- "none"
+houseprice$PoolQC[is.na(houseprice$PoolQC)] <- "none"
+houseprice$Fence[is.na(houseprice$Fence)] <- "none"
+houseprice$MiscFeature[is.na(houseprice$MiscFeature)] <- "none"
+houseprice <- houseprice %>% drop_na()
+
+glimpse(houseprice)
+houseprice %>% summarise_all(~ sum(is.na(.))) #to check no na values
+
+# Utilities column gives no information since it is same for all the instances
+unique(houseprice$Utilities)
+#So we drop it
+houseprice$Utilities <- NULL
+
+var_mode <- sapply(houseprice, mode)
+var_class <- sapply(houseprice, class)
+# find character columns
+ind1 <- which(var_mode %in% c("character"))
+# character to factor
+houseprice[ind1] <- lapply(houseprice[ind1], as.factor)
+
+set.seed(5)
+train_indices_house = createDataPartition(y = 1:nrow(houseprice), p = 0.8, list = F)
+
+house_train <- houseprice[train_indices_house, ] %>% as.data.frame()
+house_test <- houseprice[-train_indices_house, ] %>% as.data.frame()
+
+X_house_train <- house_train %>% select(-SalePrice)
+y_house_train <- house_train %>% select(SalePrice)
+X_house_test <- house_test %>% select(-SalePrice)
+y_house_test <- house_test %>% select(SalePrice)
+```
+
+House prices data set is taken from an ongoing Kaggle competition where the participants try to predict sale prices according to the given information about the houses. It is a regression problem with more than 50 features, some are numerical and some are categorical. It has separate train and test data. Since it is an ongoing competition, the test data does not have the actual values of sale prices. Therefore, I will use the train data as my only data and extract test data from it. 
+
+Train data has 1460 instances and using summarise_all function on the train data, we see that the NA values are as follows:
+`r houseprice %>% summarise_all(~ sum(is.na(.)))`.
+
+Since I do not want to lose information, I vill create a new category called "None" for the categorical missing values Alley, FireplaceQu, PoolQC, Fence and MiscFeature. For the other na values, I will remove the instances.
+
+## Penalized Regression Approach
+```{r houseprice_PRA}
+set.seed(50)
+house_model_pra<-cv.glmnet(data.matrix(X_house_train), house_train$SalePrice, type.measure = "mse", family="gaussian", nfolds=10)
+
+print(house_model_pra)
+
+house_pred_pra <- predict(house_model_pra, newx=data.matrix(X_house_test) ,s=c("lambda.min"), type = "response")
+
+mape_test_pra <- MLmetrics::MAPE(house_pred_pra, house_test$SalePrice)
+mape_train_pra <- MLmetrics::MAPE(predict(house_model_pra, newx=data.matrix(X_house_train) ,s=c("lambda.min"), type = "response"), house_train$SalePrice)
+
+print(house_model_pra)
+plot(house_model_pra)
+```
+
+Lambda value that minimizes the error is `r house_model_pra$lambda.min`. Mean absolute percentage error (MAPE) of the model on test data is `r round(mape_test_pra*100,2)`%. On the other hand, MAPE on the train data is `r round(mape_train_pra*100,2)`%. MAPE is higher on the test data. 
+
+## Decision Tree
+```{r houseprice_DT}
+set.seed(50)
+complexity=c(0.01,0.03,0.05)
+min_number_of_observations=c(10,15,25)
+cv_summary=data.table()
+
+index <- generateCVRuns(house_train$SalePrice, ntimes=1, nfold=10, stratified =TRUE)
+best_mape <- 1000
+best_complexity <- 0
+best_min_number_of_observations <- 0
+for(i in 1:10){
+  for(c in complexity){
+    for(m in min_number_of_observations){
+      test_index <- index$`Run  1`[i]
+      train_cv <- house_train[-test_index[[1]],]
+      test_cv <- house_train[test_index[[1]],]
+      fitControl <- rpart.control(cp = c, minbucket = m)  
+      house_model_DT=rpart(SalePrice~., house_train, control=fitControl)
+      pred <- predict(house_model_DT,test_cv)
+      mape_DT <- MLmetrics::MAPE(pred, test_cv$SalePrice)
+      cv_summary <- rbind(cv_summary,data.table(Fold=i, Complexity=c, Min_Observations_per_Leaf=m, MAPE=mape_DT))
+      if(best_mape>mape_DT){
+        best_mape<-mape_DT
+        best_complexity <- c
+        best_min_number_of_observations <- m
+        best_pred <- pred
+      }
+    }
+  }
+}
+cv_summary <- cv_summary %>% group_by(Complexity, Min_Observations_per_Leaf) %>% summarise(mean_MAPE = mean(MAPE))
+print(cv_summary)
+
+fitControl <- rpart.control(cp = best_complexity, minbucket = best_min_number_of_observations)
+house_model_DT=rpart(SalePrice~., house_train, control=fitControl)
+house_pred_DT <- predict(house_model_DT, X_house_test)
+train_pred <- predict(house_model_DT, X_house_train)
+
+mape_test_DT <- MLmetrics::MAPE(house_pred_DT, house_test$SalePrice)
+mape_train_DT <- MLmetrics::MAPE(predict(house_model_DT,X_house_train), house_train$SalePrice)
+```
+
+According to the cross validation result, the best complexity parameter is `r best_complexity` and the best minimal number of observations per tree leaf is `r best_min_number_of_observations` since it gives the lowest mape of the model on cross validation test data with `r best_mape`.
+
+Now I can fit the final model and make predictions on the actual test data. MAPE of the final model on test data is `r round(mape_test_DT*100, 2)`% and on the train data it is `r round(mape_train_DT*100, 2)`%. They are very close to each other, which indicates a good model. 
+
+
+## Random Forest
+```{r houseprice_RF}
+set.seed(50)
+m=c(4,6,8)
+#for balanced folds: stratified =TRUE
+# ntree is J=500 given in hw
+J=500 
+# the minimal number of observations per tree leaf is nodesize 5 given in hw
+min_size_of_terminal_nodes=5
+n_folds=10
+fitControl=trainControl(method = "repeatedcv", number = n_folds, repeats = 1, verboseIter = TRUE, returnResamp = "all")   
+rf_grid=expand.grid(mtry = m)
+
+house_model_RF=train(SalePrice ~ ., data = house_train, method = "rf", trControl = fitControl, ntree=J, nodesize = min_size_of_terminal_nodes, tuneGrid = rf_grid)
+
+print(house_model_RF[["results"]])
+
+house_pred_RF <- predict(house_model_RF, newdata=X_house_test)
+mape_test_RF <- MLmetrics::MAPE(house_pred_RF, house_test$SalePrice)
+mape_train_RF <- MLmetrics::MAPE(predict(house_model_RF,X_house_train), house_train$SalePrice)
+
+```
+
+
+The best m parameter is found as `r house_model_RF[["finalModel"]][["mtry"]]` and the final model is created using it. MAPE of the final model on test data is `r round(mape_test_RF*100, 2)`% and on the train data it is `r round(mape_train_RF*100, 2)`%. They are close to each other, which indicates a good model. 
+
+
+## Stochastic Gradient Boosting
+```{r houseprice_SGB}
+set.seed(50)
+n_folds <- 10
+fitControl <- trainControl(method = "cv", number = n_folds)  
+
+gbmGrid_forever <-  expand.grid(interaction.depth = c(1, 5, 7), n.trees = c(50,100,200), shrinkage = c(0.05, 0.1, 0.2), n.minobsinnode = c(10))
+
+print(gbmGrid_forever)
+
+gbmGrid <-  expand.grid(interaction.depth = c(5), n.trees = c(100), shrinkage = c(0.1), n.minobsinnode = c(10))
+
+house_model_sgb=train(SalePrice ~ ., data = data.frame(house_train), method = "gbm", trControl = fitControl, tuneGrid = gbmGrid_forever, verbose=F, preProc = "zv")
+
+house_pred_sgb <- predict(house_model_sgb, newdata=X_house_test) %>% as.matrix()
+mape_test_sgb <- MLmetrics::MAPE(house_pred_sgb, house_test$SalePrice)
+mape_train_sgb <- MLmetrics::MAPE(predict(house_model_sgb,X_house_train), house_train$SalePrice)
+
+print(house_model_sgb[["results"]])
+```
+
+Using `gbmGrid_forever` and keeping the minimal number of observations per tree leaf fixed as `r gbmGrid$n.minobsinnode`, optimal parameters are `r gbmGrid$interaction.depth`, `r gbmGrid$shrinkage` and `r gbmGrid$n.trees` respective to depth, learning rate and number of trees.
+
+MAPE of the final model on test data is `r round(mape_test_sgb*100, 2)`% and on the train data it is `r round(mape_train_sgb*100, 2)`%. They are close to each other, which indicates a good model. These values are the smallest ones compared to other methods.
+
+
+# Comparison
+
+For the observations below, I will use the model order PRA, DT, RF and SGB. 
+
+For Optical Recognition of Handwritten Digits dataset, the accuracy of the models on the test data are: `r round(digits_cm_pra_test$overall[1:1]*100, 2)`%, `r round(digits_cm_DT_test$overall[1:1]*100, 2)`%, `r round(digits_cm_RF_test$overall[1:1]*100, 2)`% and `r round(digits_cm_sgb_test$overall[1:1]*100, 2)`%, respective to the model order. RF and SGB methods indicates overfitting since they both have 100% accuracy on train data. DT does not indicate overfitting but since accuracy is near 75% for both test and train data, it may ve underfitting. On the other hand, PRA seem to work better on this data since it's test and train accuracy values are close and high, also train accuracy is not 100%.
+
+For Mushroom Types dataset, the accuracy of the models on the test data are: `r round(mushroom_cm_pra_test$overall[1:1]*100, 2)`%, `r round(mushroom_cm_DT_test$overall[1:1]*100, 2)`%, `r round(mushroom_cm_RF_test$overall[1:1]*100, 2)`% and `r round(mushroom_cm_sgb_test$overall[1:1]*100, 2)`%, respective to the model order. These values are very high, so there might be a data leakage problem. 
+
+For Customer Churn dataset, the accuracy of the models on the test data are: `r round(churn_cm_pra_test$overall[1:1]*100, 2)`%, `r round(churn_cm_DT_test$overall[1:1]*100, 2)`%, `r round(churn_cm_RF_test$overall[1:1]*100, 2)`% and `r round(churn_cm_sgb_test$overall[1:1]*100, 2)`%, respective to the model order. 
+
+For House Prices dataset, the MAPE of the models on the train data are: `r round(mape_train_pra*100, 2)`%, `r round(mape_train_DT*100, 2)`%, `r round(mape_train_RF*100, 2)`% and `r round(mape_train_sgb*100, 2)`%, respective to the model order. For House Prices dataset, the MAPE of the models on the test data are: `r round(mape_test_pra*100, 2)`%, `r round(mape_test_DT*100, 2)`%, `r round(mape_test_RF*100, 2)`% and `r round(mape_test_sgb*100, 2)`%, respective to the model order. Here, DT model performed better on the test data. On the other hand SGB model gave the smallest MAPE for both train and test data, since the errors are very close, this is a good model.
+
+# References
+[1] [Digit Recognition Data](http://archive.ics.uci.edu/ml/datasets/Optical+Recognition+of+Handwritten+Digits)
+
+[2] [Mushroom Types Data](http://archive.ics.uci.edu/ml/datasets/Mushroom)
+
+[3] [Churn Data](https://www.kaggle.com/blastchar/telco-customer-churn)
+
+[4] [House Prices Data](https://www.kaggle.com/c/house-prices-advanced-regression-techniques/data)
+
+
+
+

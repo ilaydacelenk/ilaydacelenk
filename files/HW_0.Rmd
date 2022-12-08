@@ -1,0 +1,33 @@
+---
+title: "Interesting R Examples"
+author: "İlayda Çelenk - IE582 - Fall 2020"
+output: html_document
+---
+```{r, echo=FALSE, results="hide", warning=FALSE}
+library(knitr)
+opts_chunk$set(tidy.opts=list(width.cutoff=60),tidy=TRUE)
+```
+
+1. [Credit Card Fraud Detection](https://www.kaggle.com/lmorgan95/fraud-detection-smote-xgboost-business-impact)
+
+Fraud detection is a classification problem and the data sets are expected to be imbalanced due to low rate of fraud occurrence. This notebook is interesting because it deals with this problem in the pre-processing step. SMOTE is an oversampling technique where the minority class is oversampled using KNN(Kth nearest neighbor). SMOTE is applied only on the train sets. XGBoost models with different parameters are compared and ROC curves are well explained in this notebook. 
+
+2. [Digit Recognizer](https://www.kaggle.com/arathee2/random-forest-vs-xgboost-vs-deep-neural-network)
+
+This notebook is interesting because it includes a comparison of Random Forest, XGBoost and Deep Neural Network models on image recognition. The topic is also interesting and important to understand due to the impact on real life. H2O package is used for machine learning due to its speed, understanding and using this model is also important.
+
+3. [Singapore Public Housing Dataset](https://www.kaggle.com/lizexi/singapore-s-public-housing-eda-price-predictions)
+
+This notebook is an example of regression. It presents the basics of a regression model and makes use of feature engineering. Different regression models are compared using R squared value for the prediction accuracy. The final model is LASSO regression and it is important to understand mathematical explanation of the different models. Interaction terms are also used in this model. 
+
+4. [COVID-19 cases by Continent](https://www.kaggle.com/okwirjulius/visualizations-of-covid-19-cases-in-africa)
+
+In my opinion COVID analysis and comparisons are not very reliable since countries have different approaches on labeling people sick. This notebook presents exploratory analysis and visualization. It is important to see this kind of work as well. Lubridate is a very handy package in case of dealing with date and time, this notebook is an example of it.
+
+
+5. [Market Basket Analysis](https://www.kaggle.com/xvivancos/market-basket-analysis)
+
+This analysis is interesting because relationship between items in a market basket is a highly hot topic. In this notebook, Apriori algorithm is used for this problem. This algorithm creates association rules considering their joint probability on a given data set. Since I majored in mathematics, the mathematical background of this algorithm is very interesting to me.
+
+
+<br>To see all my work related to IE 582 course, visit my [Progress Journal website](https://bu-ie-582.github.io/fall20-ilaydacelenk/). You can also visit my personal Github [Website](https://ilaydacelenk.github.io/) and my [Progress Journal](https://pjournal.github.io/boun01-ilaydacelenk/) for IE 48A.

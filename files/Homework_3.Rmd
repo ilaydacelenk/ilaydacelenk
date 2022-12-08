@@ -1,0 +1,251 @@
+---
+title: "HOMEWORK 3"
+author: "ilaydacelenk"
+date: "16/11/2020"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, conflict=FALSE, warning=FALSE, message=FALSE, error = FALSE, comment = FALSE)
+```
+
+```{r libraries}
+#importing the libraries
+library(MLmetrics)
+library(tidyr)
+library(dplyr)
+library(reshape2)
+library(ggplot2)
+library(tidyverse)
+library(glmnet)
+library(CVXR)
+library(lubridate)
+
+```
+
+### Introduction:
+
+This assignment will focus on regression approaches to forecast the next day's hourly electricity consumption. The approaches will be compared according to mean absolute percentage error(MAPE) values. We will learn the model using the train data and compare the model results using test data. 
+
+### Data Collection:
+
+Let's read the data from the repository and rename the columns. Then we can manipulate the data structures. For example `Consumption` values include both "," and "." separators, therefore it is wise to use . only. Also, for simplicity, `Hour` values are be mapped into 0, 1, .., 23.
+
+
+```{r read-data}
+raw <-  read.csv("https://raw.githubusercontent.com/BU-IE-582/fall20-ilaydacelenk/master/files/hw3_data.csv")
+
+set.seed(150)
+
+data <- rename(raw,
+    Date = Date,
+    Hour = Hour,
+    Consumption = Consumption..MWh.) %>% mutate(Consumption = as.numeric(sub(",", "", Consumption, fixed = TRUE))) %>% mutate(Hour = as.character(as.numeric(factor(Hour))-1))
+
+data %>% glimpse()
+```
+
+### Tasks:
+
+#### Naive Approaches
+
+There will be two naive approaches. One of them will use 48 hours ago consumption and the other will use 168 hours ago consumption. For `lag 48`, predictions are simply the data from 48 hours ago. We first create `lag_48` and `lag_168` columns. We divide the data set into train and test. Training data is from 1st of January, 2016 till the 1st of November, 2020 and test data is from 1st of November, 2016 till the 1st of December, 2020. Since the first 48 rows of `lag_48` column and the first 168 rows of `lag_168` column do not have any values they are represented as NA and we create different train sets for each where we remove the NA rows from the train data. 
+
+
+We also observe that for 27.03.2016 we have 2 rows of hour 4 and there is no row for hour 3. We will remove this entire date as discussed in class. After creating the table with lag values, we will need to remove the dates 27.03.2016, 29.03.2016 and 03.04.2016. The last 2 dates will also be removed since they would need to use 2 and 7 days lag values from 27.03.2016.
+```{r part-a}
+data <- data %>% mutate(lag_48 = lag(Consumption, 48, na.pad = TRUE), lag_168 = lag(Consumption, 168, na.pad = TRUE))
+
+test <- data %>% tail(30*24)
+train <- data %>% head(-30*24)
+
+#manipulating noisy data
+train48 <- train %>% drop_na(lag_48) %>% filter(!(Date %in% c("27.03.2016", "29.03.2016", "03.04.2016")))
+train168 <- train %>% drop_na(lag_168) %>% filter(!(Date %in% c("27.03.2016", "29.03.2016", "03.04.2016")))
+
+lag48_error <- MAPE(test$lag_48, test$Consumption)
+lag168_error <- MAPE(test$lag_168, test$Consumption)
+
+```
+
+Using the lag consumption values as our forecast, the mean absolute percentage errors(MAPE) are computed as `r 100*round(lag48_error,4)`% and `r 100*round(lag168_error,4)`% for the lag 48 and lag 168 values respectively.   
+
+
+#### Multiple Linear Regression with Lags as Features
+
+Now, we treat lag consumption values as features to build a regression model. Here we teach the model using the train data removing NA rows. 
+
+```{r part-b}
+linear_model <- lm(Consumption ~ lag_48 + lag_168, train168)
+summary(linear_model)
+
+linear_error <- MAPE(predict(linear_model, newdata = test), test$Consumption)
+```
+
+Then we make the prediction on the test data and calculated MAPE value is `r 100*round(linear_error,4)`%, which is not better than the naive method with lag 168 values.
+
+#### Seasonality
+
+Energy consumption may be affected by hourly seasonality. Therefore, in order to account for it better than the previous part, we can model each hour separately and train the models for each hour. Since there are 24 hours, there will be 24 models. Again we will use the train data for lag_168 due to the same reason as above. We filter the train data according to each `Hour` value, then create a model. Afterwards, we predict values using test data and create a column named `pred` which is consisted of the predicted values. After doing this for all of the hours, we combine rows in order to get the overall test and prediction values on one table. 
+
+```{r part-c}
+#do not forget to put train168 instead of train
+seasonality <- function(train_data, test_data, hour){
+  train_hourly <- train_data %>% filter(Hour==hour)
+  model <- lm(Consumption ~ lag_48 + lag_168, train_hourly)
+  test_hourly <- test_data %>% filter(Hour==hour) %>% mutate(pred=predict(model, newdata = .))
+  return(test_hourly)
+}
+
+sum <- 0
+seasonal_pred <- seasonality(train168, test, 0)
+sum <- MAPE(seasonal_pred$pred, seasonal_pred$Consumption)
+for(i in 1:23) 
+{
+  seasonal_pred <- rbind(seasonal_pred, seasonality(train168, test, i))
+  sum <- sum + MAPE(seasonal_pred$pred, seasonal_pred$Consumption)
+}
+
+avg_mape <- sum/24
+
+seasonal_error <- MAPE(seasonal_pred$pred, seasonal_pred$Consumption)
+```
+
+The average MAPE value is `r 100*round(avg_mape,4)`%. And, after binding all the predictions we calculate the MAPE value, which is found as `r 100*round(seasonal_error,4)`%. Again, there is no improvement.
+
+
+#### Hourly Consumption of Last Week's Same Day with Lasso Regression
+
+Again, we remove the rows with NA values at the beginning. For the train data we will use lag 48 and lag 168 values and it will have `r length(unique(train168[["Date"]]))` rows and test data will have `r length(unique(test[["Date"]]))` rows. Each row will represent a date and it will consist the consumption values of same day's 24 hours and 24 hours from 7 days ago and also 24 hours from 2 days ago. So we will try to use the 48 hours from 2 and 7 days in order to predict each 24 hours belonging to the current date. This means 24 models each using 48 features. I choose lambda.min value to use in predictions. 
+
+
+```{r part-d}
+test_wide <- test %>% rename (Lag_day7=lag_168, Lag_day2=lag_48) %>% pivot_wider(names_from=Hour, values_from=c(Lag_day7,Lag_day2, Consumption), names_prefix=c("hour_", "hour_")) %>% unnest()
+
+train_wide <- train168 %>% rename (Lag_day7=lag_168, Lag_day2=lag_48) %>% pivot_wider(names_from=Hour, values_from=c(Lag_day7,Lag_day2, Consumption), names_prefix=c("hour_", "hour_")) %>% unnest()
+```
+
+We have transformed the data into the wide format from the long format. We see that the features have strong autocorrelation, therefore we will use a penalized regression approach for modeling as suggested. 
+
+Here we can see the summary of the model for the 23rd hour as an example.
+```{r part-d2}
+#I will be removing Date column, so just in case store them in vectors
+train_date <- as.Date(train_wide$Date,format="%d.%m.%y")
+test_date <- as.Date(test_wide$Date,format="%d.%m.%y")
+
+#Since cv.glmnet takes matrices, we convert the dataset
+#each row is an observation row so I removed Date column since it's not a feature
+train_matrix_features <- train_wide[, 2:49] %>% data.matrix()
+test_matrix_features <- test_wide[, 2:49] %>% data.matrix()
+
+#predicting consumption hour 0, using Lag_day7_hour_0 to 23 and Lag_day2_hour_0 to 23, i.e 48 features
+#to predict hour 0, we'll use 50th column of train_wide and test_wide
+#to predict hour 23, we'll use 73rd column of train_wide and test_wide
+
+#alpha=1 for lasso, nfolds=10 is asked
+
+#print(model)
+#plot(model)
+#coef(model,s="lambda.min")
+
+model0 <- cv.glmnet(x=train_matrix_features, y=train_wide$Consumption_hour_0, family="gaussian", nfolds = 10, alpha=1)
+model1 <- cv.glmnet(x=train_matrix_features, y=train_wide$Consumption_hour_1, family="gaussian", nfolds = 10, alpha=1)
+model2 <- cv.glmnet(x=train_matrix_features, y=train_wide$Consumption_hour_2, family="gaussian", nfolds = 10, alpha=1)
+model3 <- cv.glmnet(x=train_matrix_features, y=train_wide$Consumption_hour_3, family="gaussian", nfolds = 10, alpha=1)
+model4 <- cv.glmnet(x=train_matrix_features, y=train_wide$Consumption_hour_4, family="gaussian", nfolds = 10, alpha=1)
+model5 <- cv.glmnet(x=train_matrix_features, y=train_wide$Consumption_hour_5, family="gaussian", nfolds = 10, alpha=1)
+model6 <- cv.glmnet(x=train_matrix_features, y=train_wide$Consumption_hour_6, family="gaussian", nfolds = 10, alpha=1)
+model7 <- cv.glmnet(x=train_matrix_features, y=train_wide$Consumption_hour_7, family="gaussian", nfolds = 10, alpha=1)
+model8 <- cv.glmnet(x=train_matrix_features, y=train_wide$Consumption_hour_8, family="gaussian", nfolds = 10, alpha=1)
+model9 <- cv.glmnet(x=train_matrix_features, y=train_wide$Consumption_hour_9, family="gaussian", nfolds = 10, alpha=1)
+model10 <- cv.glmnet(x=train_matrix_features, y=train_wide$Consumption_hour_10, family="gaussian", nfolds = 10, alpha=1)
+model11 <- cv.glmnet(x=train_matrix_features, y=train_wide$Consumption_hour_11, family="gaussian", nfolds = 10, alpha=1)
+model12 <- cv.glmnet(x=train_matrix_features, y=train_wide$Consumption_hour_12, family="gaussian", nfolds = 10, alpha=1)
+model13 <- cv.glmnet(x=train_matrix_features, y=train_wide$Consumption_hour_13, family="gaussian", nfolds = 10, alpha=1)
+model14 <- cv.glmnet(x=train_matrix_features, y=train_wide$Consumption_hour_14, family="gaussian", nfolds = 10, alpha=1)
+model15 <- cv.glmnet(x=train_matrix_features, y=train_wide$Consumption_hour_15, family="gaussian", nfolds = 10, alpha=1)
+model16 <- cv.glmnet(x=train_matrix_features, y=train_wide$Consumption_hour_16, family="gaussian", nfolds = 10, alpha=1)
+model17 <- cv.glmnet(x=train_matrix_features, y=train_wide$Consumption_hour_17, family="gaussian", nfolds = 10, alpha=1)
+model18 <- cv.glmnet(x=train_matrix_features, y=train_wide$Consumption_hour_18, family="gaussian", nfolds = 10, alpha=1)
+model19 <- cv.glmnet(x=train_matrix_features, y=train_wide$Consumption_hour_19, family="gaussian", nfolds = 10, alpha=1)
+model20 <- cv.glmnet(x=train_matrix_features, y=train_wide$Consumption_hour_20, family="gaussian", nfolds = 10, alpha=1)
+model21 <- cv.glmnet(x=train_matrix_features, y=train_wide$Consumption_hour_21, family="gaussian", nfolds = 10, alpha=1)
+model22 <- cv.glmnet(x=train_matrix_features, y=train_wide$Consumption_hour_22, family="gaussian", nfolds = 10, alpha=1)
+model23 <- cv.glmnet(x=train_matrix_features, y=train_wide$Consumption_hour_23, family="gaussian", nfolds = 10, alpha=1)
+
+pred_hour <- test %>% select(-lag_168, -lag_48)
+pred_hour0 <- pred_hour %>% filter(Hour==0) %>% mutate(pred=predict(model0, newx=test_matrix_features ,s=c("lambda.min")))
+pred_hour1 <- pred_hour %>% filter(Hour==1) %>% mutate(pred=predict(model1, newx=test_matrix_features ,s=c("lambda.min")))
+pred_hour2 <- pred_hour %>% filter(Hour==2) %>% mutate(pred=predict(model2, newx=test_matrix_features ,s=c("lambda.min")))
+pred_hour3 <- pred_hour %>% filter(Hour==3) %>% mutate(pred=predict(model3, newx=test_matrix_features ,s=c("lambda.min")))
+pred_hour4 <- pred_hour %>% filter(Hour==4) %>% mutate(pred=predict(model4, newx=test_matrix_features ,s=c("lambda.min")))
+pred_hour5 <- pred_hour %>% filter(Hour==5) %>% mutate(pred=predict(model5, newx=test_matrix_features ,s=c("lambda.min")))
+pred_hour6 <- pred_hour %>% filter(Hour==6) %>% mutate(pred=predict(model6, newx=test_matrix_features ,s=c("lambda.min")))
+pred_hour7 <- pred_hour %>% filter(Hour==7) %>% mutate(pred=predict(model7, newx=test_matrix_features ,s=c("lambda.min")))
+pred_hour8 <- pred_hour %>% filter(Hour==8) %>% mutate(pred=predict(model8, newx=test_matrix_features ,s=c("lambda.min")))
+pred_hour9 <- pred_hour %>% filter(Hour==9) %>% mutate(pred=predict(model9, newx=test_matrix_features ,s=c("lambda.min")))
+pred_hour10 <- pred_hour %>% filter(Hour==10) %>% mutate(pred=predict(model10, newx=test_matrix_features ,s=c("lambda.min")))
+pred_hour11 <- pred_hour %>% filter(Hour==11) %>% mutate(pred=predict(model11, newx=test_matrix_features ,s=c("lambda.min")))
+pred_hour12 <- pred_hour %>% filter(Hour==12) %>% mutate(pred=predict(model12, newx=test_matrix_features ,s=c("lambda.min")))
+pred_hour13 <- pred_hour %>% filter(Hour==13) %>% mutate(pred=predict(model13, newx=test_matrix_features ,s=c("lambda.min")))
+pred_hour14 <- pred_hour %>% filter(Hour==14) %>% mutate(pred=predict(model14, newx=test_matrix_features ,s=c("lambda.min")))
+pred_hour15 <- pred_hour %>% filter(Hour==15) %>% mutate(pred=predict(model15, newx=test_matrix_features ,s=c("lambda.min")))
+pred_hour16 <- pred_hour %>% filter(Hour==16) %>% mutate(pred=predict(model16, newx=test_matrix_features ,s=c("lambda.min")))
+pred_hour17 <- pred_hour %>% filter(Hour==17) %>% mutate(pred=predict(model17, newx=test_matrix_features ,s=c("lambda.min")))
+pred_hour18 <- pred_hour %>% filter(Hour==18) %>% mutate(pred=predict(model18, newx=test_matrix_features ,s=c("lambda.min")))
+pred_hour19 <- pred_hour %>% filter(Hour==19) %>% mutate(pred=predict(model19, newx=test_matrix_features ,s=c("lambda.min")))
+pred_hour20 <- pred_hour %>% filter(Hour==20) %>% mutate(pred=predict(model20, newx=test_matrix_features ,s=c("lambda.min")))
+pred_hour21 <- pred_hour %>% filter(Hour==21) %>% mutate(pred=predict(model21, newx=test_matrix_features ,s=c("lambda.min")))
+pred_hour22 <- pred_hour %>% filter(Hour==22) %>% mutate(pred=predict(model22, newx=test_matrix_features ,s=c("lambda.min")))
+pred_hour23 <- pred_hour %>% filter(Hour==23) %>% mutate(pred=predict(model23, newx=test_matrix_features ,s=c("lambda.min")))
+
+
+lasso_pred <- rbind(pred_hour0, pred_hour1, pred_hour2, pred_hour3, pred_hour4, pred_hour5, pred_hour6, pred_hour7, pred_hour8, pred_hour9, pred_hour10, pred_hour11, pred_hour12, pred_hour13, pred_hour14, pred_hour15, pred_hour16, pred_hour17, pred_hour18, pred_hour19, pred_hour20, pred_hour21, pred_hour22, pred_hour23)
+
+lasso_error <- MAPE(lasso_pred$pred, lasso_pred$Consumption)
+
+summary(model23)
+
+```
+
+Using penalized lasso approach, we got `r 100*round(lasso_error,4)`% as the MAPE value and this is the best so far. 
+
+
+
+#### BONUS: Fused Lasso Regression
+
+In order to apply Penalized Regression with fused penalties, we need to write a customized loss function to minimize. It will have 3 components namely sum of squared errors, ridge penalty over the coefficients and fused lasso penalties. We will use hourly consumption from the wide format as `y` and after adding a column of 1's for the intercept we will use train_matrix_features as X. Loss function will be `sum_squares(y-X*b) + lambda_2 * sum_squares(b) + lambda_1 * sum(diff(b, lag=1, differences=1))` where `y` is hourly consumption from the wide format and `X` is the feature columns from the train matrix with an additional column of 1's as the intercept. 
+
+```{r part-e}
+y <- train_wide$Consumption_hour_0
+X <- cbind(1,train_matrix_features)
+
+lambda=min(model0$lambda.min, model1$lambda.min, model2$lambda.min, model3$lambda.min, model4$lambda.min, model5$lambda.min,model6$lambda.min, model7$lambda.min, model8$lambda.min, model9$lambda.min, model10$lambda.min, model11$lambda.min,model12$lambda.min, model13$lambda.min, model14$lambda.min, model15$lambda.min, model6$lambda.min, model7$lambda.min,model18$lambda.min, model19$lambda.min, model20$lambda.min, model21$lambda.min, model22$lambda.min, model23$lambda.min)
+
+
+```
+
+
+#### Comparing the Results
+According to the models we have created, the best one is lasso regression since it has the smallest MAPE value. 
+
+```{r part-f}
+#ape=absolute percentage error without taking the mean
+all_pred <- lasso_pred %>% rename(lasso_pred=pred) %>% full_join(.,test,by=c("Date", "Hour", "Consumption")) %>% mutate(linear_pred=predict(linear_model, newdata = .)) %>% full_join(.,seasonal_pred,by=c("Date", "Hour", "Consumption", "lag_48", "lag_168")) %>% rename(seasonal_pred=pred) %>% mutate(ape_lasso = (abs(Consumption-lasso_pred)/Consumption), ape_48 = (abs(Consumption-lag_48)/Consumption), ape_168 = (abs(Consumption-lag_168)/Consumption), ape_linear = (abs(Consumption-linear_pred)/Consumption), ape_seasonal = (abs(Consumption-seasonal_pred)/Consumption))
+
+long <- all_pred %>% select(Date, Hour, Consumption, ape_48, ape_168, ape_linear, ape_seasonal, ape_lasso) %>% melt(id.vars = c("Date", "Hour", "Consumption")) %>% mutate(Absolute_perc_error=value, Model=variable)
+
+ggplot(long) + geom_boxplot(aes(y=Absolute_perc_error, x=Model, fill=Model)) + xlab("Method") + ylab("Absolute Percentage Errors") + theme(plot.title=element_text(hjust = 0.5)) + ggtitle("Comparison of MAPE Values") + scale_x_discrete(labels=c("2 Days Lag","7 Days Lag","Linear", "Seasonal", "Lasso")) + theme(legend.position = "none")
+
+print(long %>% group_by(Model) %>% summarise(MAPE=mean(Absolute_perc_error), max=max(Absolute_perc_error)))
+
+```
+
+
+### Reference
+
+[1] Dataset: Electricity Consumption data from 1st of January, 2016 till the 1st of December, 2020 from [Energy Exchange Istanbul(EXIST) Webpage](https://seffaflik.epias.com.tr/transparency/tuketim/gerceklesen-tuketim/gercek-zamanli-tuketim.xhtml).
+

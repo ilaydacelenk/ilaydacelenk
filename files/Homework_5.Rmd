@@ -1,0 +1,381 @@
+---
+title: "HOMEWORK 5"
+author: "ilaydacelenk"
+date: "15/02/2021"
+output: 
+  html_document:
+      toc: true
+      toc_depth: 3
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, conflict=FALSE, warning=FALSE, message=FALSE, error = FALSE, comment = FALSE)
+```
+
+```{r libraries}
+#importing the libraries
+library(tidyverse) #filter etc.
+library(ggplot2) 
+library(reshape) #melt
+library(directlabels)
+library(dplyr)
+library(data.table) #data.table
+library(caret)
+library(TunePareto) #generateCVRuns
+library(glmnet)
+library(kknn)
+library(penalized)
+```
+
+# Introduction:
+The first task is on uWaveGestureLibrary. It consists over 4000 three-axis accelerometer instances from 8 people with 8 different gestures, our aim is to perform classification task by Nearest Neighbor Approach. Then, the second task is to use a penalized regression approach to classify given EcG data. 
+
+# Task 1
+
+```{r read-data1}
+#reading the data from repository
+x_train<-read.table("https://github.com/BU-IE-582/fall20-ilaydacelenk/blob/master/files/HW2_data/uWaveGestureLibrary_X_TRAIN.txt?raw=true") %>% as.data.frame()
+y_train<-read.table("https://github.com/BU-IE-582/fall20-ilaydacelenk/blob/master/files/HW2_data/uWaveGestureLibrary_Y_TRAIN.txt?raw=true") %>% as.data.frame()
+z_train<-read.table("https://github.com/BU-IE-582/fall20-ilaydacelenk/blob/master/files/HW2_data/uWaveGestureLibrary_Z_TRAIN.txt?raw=true") %>% as.data.frame()
+
+x_test<-read.table("https://github.com/BU-IE-582/fall20-ilaydacelenk/blob/master/files/HW2_data/uWaveGestureLibrary_X_TEST.txt?raw=true") %>% as.data.frame()
+y_test<-read.table("https://github.com/BU-IE-582/fall20-ilaydacelenk/blob/master/files/HW2_data/uWaveGestureLibrary_Y_TEST.txt?raw=true") %>% as.data.frame()
+z_test<-read.table("https://github.com/BU-IE-582/fall20-ilaydacelenk/blob/master/files/HW2_data/uWaveGestureLibrary_Z_TEST.txt?raw=true") %>% as.data.frame()
+
+x_name <- c("x")
+x_names <- c()
+for(i in 1:ncol(x_train)){
+  x_names <- x_names %>% append(x_name)
+}
+colnames(x_train) <- make.names(x_names, unique=TRUE)
+colnames(x_test) <- make.names(x_names, unique=TRUE)
+
+y_name <- c("y")
+y_names <- c()
+for(i in 1:ncol(y_train)){
+  y_names <- y_names %>% append(y_name)
+}
+colnames(y_train) <- make.names(y_names, unique=TRUE)
+colnames(y_test) <- make.names(y_names, unique=TRUE)
+
+z_name <- c("z")
+z_names <- c()
+for(i in 1:ncol(z_train)){
+  z_names <- z_names %>% append(z_name)
+}
+colnames(z_train) <- make.names(z_names, unique=TRUE)
+colnames(z_test) <- make.names(z_names, unique=TRUE)
+
+```
+
+```{r combine-data}
+train <- cbind(x_train[,-1], y_train[,-1], z_train[,-1]) %>% scale()
+test <- cbind(x_test[,-1], y_test[,-1], z_test[,-1]) %>% scale()
+
+class <- x_train[,1]
+train_class <- class
+trainn <- cbind(class, train) %>% as.data.frame()
+trainn$class <- sub("^", "g", trainn$class) %>% as.factor()
+
+class <- x_test[,1]
+test_class <- class
+testt <- cbind(class, test) %>% as.data.frame()
+testt$class <- sub("^", "g", testt$class) %>% as.factor()
+
+
+```
+
+
+
+## Task1a
+
+```{r nn-euc}
+set.seed(3)
+k_levels <- c(1, 3, 5, 7, 9, 11, 13, 15)
+nofReplications <- 3
+nFolds <- 10
+#for balanced folds: stratified =TRUE
+indices <- generateCVRuns(trainn$class, ntimes=nofReplications, nfold=nFolds, stratified=TRUE)
+cv_results <- data.table()
+
+for(i in 1:nofReplications) {
+  rep<-indices[[i]]
+  for(j in 1:nFolds){
+   test_ind<-rep[[j]] 
+   cv_train<-trainn[-test_ind,] 
+   cv_test<-trainn[test_ind,]
+   
+   for(m in 1:length(k_levels)){
+      k_tune <- k_levels[m]
+      model_knn_euc <- kknn(class~., cv_train, cv_test, k = k_tune, kernel="rectangular", distance=2)
+      pred <- model_knn_euc[["fitted.values"]]
+      cm_test_man <- confusionMatrix(pred, cv_test$class)
+      cv_results <- rbind(cv_results, data.table(Replication=i, Fold=j, K=k_tune, TestId=test_ind,
+                                         Predictions=pred, Actual=cv_test$class))
+    }   
+   
+  }
+  
+}
+
+Euclidean_result <- cv_results[,list(Accuracy=mean(Predictions==Actual)),by=list(K)] %>% arrange(desc(Accuracy))
+Euclidean_result
+besk_k <- as.matrix(Euclidean_result)
+
+euc_time <- system.time(
+  model_knn_euc <- kknn(class~., trainn, testt, k = besk_k[1,1], kernel="rectangular", distance=2)
+)
+
+model_knn_euc2 <- kknn(class~., trainn, trainn, k = besk_k[1,1], kernel="rectangular", distance=2)
+
+
+
+## REMARK
+# Alternatively, we could also use the train function from caret, it will give the same result, for the best tune it gives the same accuracy (I checked)
+#k_levels <- c(1, 3, 5, 7, 9, 11, 13, 15)
+#nofReplications <- 1
+#nFolds <- 10
+#fitControl <- trainControl(method = "repeatedcv", number = nFolds, repeats = nofReplications, savePred = TRUE, classProbs = TRUE)
+#grid <- expand.grid(k=k_levels)
+#model_knn_euc <- train(class ~ ., data = trainn, method = "knn", trControl = fitControl, tuneGrid = grid)
+#pred_euc <- predict(model_knn_euc, newdata=test)
+```
+
+Using Euclidean distance, I applied a 10-fold cross-validation nearest-neighbor classifier. The number of neighbors (k) that minimizes the error is found as `r besk_k[1,1]`. 
+
+
+```{r nn-man}
+set.seed(1)
+k_levels <- c(1, 3, 5, 7, 9, 11, 13, 15)
+nofReplications <- 3
+nFolds <- 10
+#for balanced folds: stratified =TRUE
+indices <- generateCVRuns(trainn$class, ntimes=nofReplications, nfold=nFolds, stratified=TRUE)
+cv_results <- data.table()
+
+for(i in 1:nofReplications) {
+  rep<-indices[[i]]
+  for(j in 1:nFolds){
+   test_ind<-rep[[j]] 
+   cv_train<-trainn[-test_ind,] 
+   cv_test<-trainn[test_ind,]
+   
+   for(m in 1:length(k_levels)){
+      k_tune <- k_levels[m]
+      model_knn_man <- kknn(class~., cv_train, cv_test, k = k_tune, kernel="rectangular", distance=1)
+      pred <- model_knn_man[["fitted.values"]]
+      cm_test_man <- confusionMatrix(pred, cv_test$class)
+      cv_results <- rbind(cv_results, data.table(Replication=i, Fold=j, K=k_tune, TestId=test_ind,
+                                         Predictions=pred, Actual=cv_test$class))
+    }   
+   
+  }
+  
+}
+
+Manhattan_result <- cv_results[,list(Accuracy=mean(Predictions==Actual)),by=list(K)] %>% arrange(desc(Accuracy))
+Manhattan_result
+besk_k <- as.matrix(Manhattan_result)
+
+man_time <- system.time(
+  model_knn_man <- kknn(class~., trainn, testt, k = besk_k[1,1], kernel="rectangular", distance=1)
+)
+
+model_knn_man2 <- kknn(class~., trainn, trainn, k = besk_k[1,1], kernel="rectangular", distance=1)
+
+
+
+
+```
+
+I used Manhattan distance in a similar manner. The number of neighbors (k) that minimizes the error is found as `r besk_k[1,1]`.
+
+## Task1b
+
+```{r performance1}
+cm_test_euc <- confusionMatrix(model_knn_euc[["fitted.values"]], testt$class)
+cm_train_euc <- confusionMatrix(model_knn_euc2[["fitted.values"]], trainn$class)
+print(cm_test_euc[["table"]])
+print(cm_train_euc[["table"]])
+cm_test_euc[["overall"]][["Accuracy"]]
+cm_train_euc[["overall"]][["Accuracy"]]
+
+euc_time
+```
+
+Using best k value for Euclidean distance, I evaluated the performance on both test and train set as `r round(cm_test_euc[["overall"]][["Accuracy"]]*100,2)`% and `r round(cm_train_euc[["overall"]][["Accuracy"]]*100,2)`% respectively. Confusion matrices are shown above, first for the test data then for the train data. The runtime for euclidean distance to predict is `r euc_time`. 
+
+
+```{r performance2}
+cm_test_man <- confusionMatrix(model_knn_man[["fitted.values"]], testt$class)
+cm_train_man <- confusionMatrix(model_knn_man2[["fitted.values"]], trainn$class)
+print(cm_test_man[["table"]])
+print(cm_train_man[["table"]])
+cm_test_man[["overall"]][["Accuracy"]]
+cm_train_man[["overall"]][["Accuracy"]]
+
+man_time
+```
+
+Using best k value for Manhattan distance, I evaluated the performance on both test and train set as `r round(cm_test_man[["overall"]][["Accuracy"]]*100,2)`% and `r round(cm_train_man[["overall"]][["Accuracy"]]*100,2)`%, respectively. Confusion matrices are shown above, first for the test data then for the train data. The runtime for euclidean distance to predict is `r man_time`. 
+
+## Task1c
+If we compute the distance as final_dist = w1dist_x, + w2dist_y + w3*dist_z, the nearest neighbors may change. This would affect the classification result. 
+I would expect the standard deviation of x-axis to be high, due to the nature of gestures and I expect this axis to be more effective. So, giving it more weight could be reasonable. 
+
+
+# Task 2
+```{r read-data2}
+#reading the data from repository
+ecg_train<-read.table("https://github.com/BU-IE-582/fall20-ilaydacelenk/blob/master/files/ecgTRAIN.txt?raw=true")
+ecg_test<-read.table("https://github.com/BU-IE-582/fall20-ilaydacelenk/blob/master/files/ecgTEST.txt?raw=true")
+# map -1-1 to 0-1
+ecg_train[,1][(ecg_train[,1]==-1)] <- 0
+ecg_test[,1][(ecg_test[,1]==-1)] <- 0
+```
+
+In this task, given ECG data, the aim is to train different logistic regression models using fused lasso penalties. Above, first I read the datasets and since the target columns consists of -1 and 1's, I map them into 0-1. I do this by mapping -1 to 0 and keeping 1's as they are. 
+
+## Task 2a
+```{r log-reg}
+set.seed(1)
+logreg1 <- optL1(response=ecg_train[,1], penalized=ecg_train[,-1],fusedl = TRUE, fold = 10, model = "logistic")
+optlambda1 <- logreg1$lambda
+logreg2<-optL2(response=ecg_train[,1], penalized=ecg_train[,-1], fusedl = TRUE, fold = 10, model = "logistic", lambda1=optlambda1, minlambda2 = 0.5)
+optlambda2 <- logreg2$lambda
+model<-penalized(response=ecg_train[,1], penalized=ecg_train[,-1], fusedl = TRUE, model = "logistic", data=ecg_train, lambda1 = optlambda1, lambda2 = optlambda2)
+
+
+pred_train <- predict(model, penalized=ecg_train[,-1], data=ecg_train)
+pred_train[pred_train>0.5] <- 1
+pred_train[pred_train<=0.5] <- 0
+cm_train <- confusionMatrix(as.factor(pred_train), as.factor(ecg_train$V1))
+
+pred_test <- predict(model,penalized=ecg_test[,-1],data=ecg_test)
+pred_test[pred_test>0.5] <- 1
+pred_test[pred_test<=0.5] <- 0
+cm_test <- confusionMatrix(as.factor(pred_test), as.factor(ecg_test$V1))
+
+print(cm_test[["table"]])
+print(cm_train[["table"]])
+
+```
+
+Above, I trained a logistic regression model using fused lasso penalties on ECG data. I used the learned model
+to predict the class for test data. I evaluated the performance on both test and train set as `r round(cm_test[["overall"]][["Accuracy"]]*100,2)`% and `r round(cm_train[["overall"]][["Accuracy"]]*100,2)`%, respectively. Even though the accuracy for train data is high, it is not 100%, therefore there is no big overfitting problem. Confusion matrices are shown above, first for the test data then for the train data.
+
+
+
+## Task 2b
+```{r reg-coefs}
+model
+coefs <- coefficients(model,"all")
+plot(coefficients(model,"all"), type="l")
+```
+The coefficient are nearly zero when the plot is flat. There are `r sum(coefs != 0)` nonzero coefficients in the model. 
+
+## Task 2c
+```{r consecutive-difference}
+train2<-matrix(0,nrow = 100,ncol=96) # empty matrix
+train2[,1]<-ecg_train[,1] # target column
+for(i in (3:96)){
+  train2[,(i-1)]=ecg_train[,i]-ecg_train[,(i-1)]
+}
+
+test2<-matrix(0,nrow = 100,ncol=96) # empty matrix
+test2[,1]<-ecg_test[,1] # target column
+for(i in (3:96)){
+  test2[,(i-1)]=ecg_test[,i]-ecg_test[,(i-1)]
+}
+
+train2 <- train2 %>% data.frame()
+test2 <- test2 %>% data.frame()
+```
+
+Above, I create a matrix for the train data which consists of the consecutive differences of instances. This makes sense and can be done since it is a time series data. I do the same for the test data. Below I will train the model on the consecutive differences data. 
+
+```{r log-reg2}
+set.seed(1)
+logreg3 <- optL1(response=train2[,1], penalized=train2[,-1], fusedl = TRUE, fold = 10, data=train2, model = "logistic")
+optlambda3 <- logreg3$lambda
+
+logreg4 <- optL2(response=train2[,1], penalized=train2[,-1], fusedl = TRUE, fold = 10, data=train2, model = "logistic", lambda1=optlambda3, minlambda2 = 5)
+optlambda4 <- logreg4$lambda
+
+model2<-penalized(response=train2[,1], penalized=train2[,-1], fusedl = TRUE, model = "logistic", data=train2, lambda1 = optlambda3, lambda2 = optlambda4)
+
+
+pred_train <- predict(model2,penalized=train2[,-1], data=train2)
+pred_train[pred_train>0.5] <- 1
+pred_train[pred_train<=0.5] <- 0
+cm_train <- confusionMatrix(as.factor(pred_train), as.factor(train2$X1))
+
+
+pred_test <- predict(model2,penalized=train2[,-1], data=train2)
+pred_test[pred_test>0.5] <- 1
+pred_test[pred_test<=0.5] <- 0
+cm_test <- confusionMatrix(as.factor(pred_test), as.factor(test2$X1))
+
+
+print(cm_test[["table"]])
+print(cm_train[["table"]])
+
+```
+
+Above, I trained a logistic regression model using fused lasso penalties on train data with consecutive differences. I used the learned model to predict the class for test data. I evaluated the performance on both test and train set as `r round(cm_test[["overall"]][["Accuracy"]]*100,2)`% and `r round(cm_train[["overall"]][["Accuracy"]]*100,2)`%, respectively. The accuracy for test set is very low. The model is not learning very well. Confusion matrices are shown above, first for the test data then for the train data.
+
+
+## Task 2d
+```{r reg-coefs2}
+model2
+coefs <- coefficients(model2,"all")
+plot(coefficients(model2,"all"), type="l")
+```
+The coefficient are nearly zero when the plot is flat. There are `r sum(coefs != 0)` nonzero coefficients in the model. 
+
+
+## Task 2e
+```{r combineda-c}
+train3 <- cbind(ecg_train, train2[,-1])
+test3 <-  cbind(ecg_test, test2[,-1])
+
+set.seed(1)
+logreg5 <- optL1(response=train3[,1], penalized=train3[,-1], fusedl = TRUE, fold = 10, data=train3, model = "logistic")
+optlambda5 <- logreg5$lambda
+
+logreg6 <- optL2(response=train3[,1], penalized=train3[,-1], fusedl = TRUE, fold = 10, model = "logistic", data=train3, lambda1=optlambda5, minlambda2 = 0.5)
+optlambda6 <- logreg6$lambda
+
+model3<-penalized(response=train3[,1], penalized=train3[,-1], fusedl = TRUE, model = "logistic", data=train3, lambda1 = optlambda5, lambda2 = optlambda6)
+
+pred_train <- predict(model3, penalized=train3[,-1], data=train3)
+pred_train[pred_train>0.5] <- 1
+pred_train[pred_train<=0.5] <- 0
+cm_train <- confusionMatrix(as.factor(pred_train), as.factor(train3$V1))
+
+pred_test <- predict(model3, penalized=train3[,-1], data=train3)
+pred_test[pred_test>0.5] <- 1
+pred_test[pred_test<=0.5] <- 0
+cm_test <- confusionMatrix(as.factor(pred_test), as.factor(test3$V1))
+
+print(cm_test[["table"]])
+print(cm_train[["table"]])
+
+```
+
+In this part, I combined train data and consecutive train data by binding the columns. Then, I trained a logistic regression model using fused lasso penalties on combined train data with consecutive differences. I used the learned model to predict the class for test data. I evaluated the performance on both test and train set as `r round(cm_test[["overall"]][["Accuracy"]],2)*100`% and `r round(cm_train[["overall"]][["Accuracy"]]*100,2)`%, respectively. The accuracy for test set is very low. The model is not learning very well. Confusion matrices are shown above, first for the test data then for the train data.
+
+## Task 2f
+```{r reg-coefs3}
+model3
+coefs <- coefficients(model3,"all")
+plot(coefficients(model3,"all"), type="l")
+```
+The coefficient are nearly zero when the plot is flat. There are `r sum(coefs != 0)` nonzero coefficients in the model. 
+
+# Reference
+
+[1] J. Liu, Z. Wang, L. Zhong, J. Wickramasuriya, and V. Vasudevan. uWave: Accelerometer-based personalized gesture recognition and its applications. Pervasive Computing and Communications, IEEE International Conference on, 0:1-9, 2009. (link: https://www.recg.org/publications/liu09percom.pdf)
+
+[2] https://cran.r-project.org/web/packages/kknn/kknn.pdf
+

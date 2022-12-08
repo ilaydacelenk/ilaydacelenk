@@ -1,0 +1,325 @@
+---
+title: "HOMEWORK 1"
+author: "ilaydacelenk"
+date: "11/12/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, conflict=FALSE, warning=FALSE, message=FALSE, error = FALSE, comment = FALSE)
+```
+
+```{r libraries}
+#importing the libraries
+library(ggplot2)
+library(tidyverse)
+library(dplyr)
+library(httr) # GET
+library(readxl) # read_excel
+library(DT) #datatable
+```
+
+### English Premier League Data for the Seasons 2020/2021, 2019/2020 and 2018/2019
+
+The description for the columns of the data set can be downloaded from [here](https://github.com/BU-IE-582/fall20-ilaydacelenk/blob/master/files/HW1_field_definitions.xlsx?raw=true).
+
+```{r data}
+#reading the data from repository
+data_ex=read.csv("https://raw.githubusercontent.com/BU-IE-582/fall20-ilaydacelenk/master/files/hw1_data.csv")
+data20=read.csv("https://raw.githubusercontent.com/BU-IE-582/fall20-ilaydacelenk/master/files/20_21.csv")
+data19=read.csv("https://raw.githubusercontent.com/BU-IE-582/fall20-ilaydacelenk/master/files/19_20.csv")
+data18=read.csv("https://raw.githubusercontent.com/BU-IE-582/fall20-ilaydacelenk/master/files/18_19.csv")
+
+all_data<-bind_rows(mutate(data20,year=2021), mutate(data19,year=1920), mutate(data18,year=1819))
+
+```
+
+### Task 1:
+
+
+#### Number of Games vs Home Score
+
+```{r task1a}
+ggplot(all_data) + geom_histogram(aes(x = FTHG), binwidth=0.5) + xlab("Home Goals") + ylab("Number of Games") + ggtitle("Number of Games vs Home Goals") + theme(plot.title=element_text(hjust = 0.5)) + ggtitle("Histogram of Home Goals") + theme(plot.title=element_text(hjust = 0.5))
+# FTHG = Number of Goals scored by Home Team (Full time)
+```
+
+```{r task1b}
+ggplot(all_data) + geom_histogram(aes(x = FTAG), binwidth=0.5) + xlab("Away Goals") + ylab("Number of Games") + theme(plot.title=element_text(hjust = 0.5)) + ggtitle("Histogram of Away Goals") + theme(plot.title=element_text(hjust = 0.5))
+# FTHG = Number of Goals scored by Home Team (Full time)
+
+
+```
+
+```{r task1c}
+ggplot(all_data) + geom_histogram(aes(x = FTHG-FTAG), binwidth=0.5) + xlab("Home Goals – Away Goals") + ylab("Number of Games") + theme(plot.title=element_text(hjust = 0.5)) + ggtitle("Histogram of Home Goals - Away Goals")
+# FTHG = Number of Goals scored by Home Team (Full time)
+```
+
+
+#### The density of Home Goals
+```{r task1.1a}
+#Number of games in each number of goals
+density1 <-all_data %>% group_by(FTHG) %>% summarise(dens=n())
+
+#Add a new column for the expected number of games according to poisson distribution
+#Here we can also apply Chi-Square Goodness of Fit test
+density1$poisson<-dpois(c(0:max(all_data$FTHG)),lambda= mean(all_data$FTHG))*nrow(all_data)
+
+ggplot(density1, aes(FTHG,dens)) +
+  geom_col(binwidth=0.5, color="black", fill="blue")+
+  geom_line(aes(y=poisson), color="red") + xlab("Home Goals") + ylab("Number of Games") + ggtitle("Histogram of Home Goals with Poisson Distribution") + theme(plot.title=element_text(hjust = 0.5))
+```
+
+```{r task1.1b}
+#Number of games in each number of goals
+density2 <-all_data %>% group_by(FTAG) %>% summarise(dens=n()) %>% add_row(FTAG=7,dens=0) %>% add_row(FTAG=8,dens=0) %>% arrange(FTAG)
+
+#Add a new column for the expected number of games according to poisson distribution
+density2$poisson<-dpois(c(0:max(all_data$FTAG)),lambda= mean(all_data$FTAG))*nrow(all_data)
+
+ggplot(density2, aes(FTAG,dens)) +
+  geom_col(binwidth=0.5, color="black", fill="blue")+
+  geom_line(aes(y=poisson), color="red") + xlab("Away Goals") + ylab("Number of Games") + ggtitle("Histogram of Away Goals with Poisson Distribution") + theme(plot.title=element_text(hjust = 0.5))
+```
+
+#### Consistency with Poisson Distribution Claim
+
+We can apply Chi-Square Goodness of Fit test to see if the claim 
+is correct. 
+
+
+```{r task1.1c}
+#Add a new column for Home Goals - Away Goals
+all_data <- all_data %>% mutate(HA=FTHG-FTAG)
+
+ggplot(all_data, aes(x=HA)) + geom_histogram(binwidth=1, color="black", fill="blue", aes(y=..density..)) + stat_function(fun = dnorm, color="red", args = list(mean = mean(all_data$HA), sd = sd(all_data$HA))) + xlab("Home Goals – Away Goals") + ylab("Number of Games") + ggtitle("Histogram of Home Goals - Away Goals with Normal Distribution") + theme(plot.title=element_text(hjust = 0.5))
+```
+
+
+
+### Task 2:
+
+For the odds and probabilities, we are only interested in the bookmakers data. There are 6 bookmakers with 3 columns each. The columns represent home win, tie and away win.
+
+```{r task2prep, results=FALSE}
+url<-'https://github.com/BU-IE-582/fall20-ilaydacelenk/blob/master/files/HW1_field_definitions.xlsx?raw=true'
+GET(url, write_disk(tf <- tempfile(fileext = ".xlsx")))
+bookmakers <- read_excel(tf, col_names = c("code","defn"), skip=24) %>% head(-14)
+file.remove(tf)
+```
+
+
+First, let's calculate P(home win), P(tie) and P(away win) by P(x)=1/odd. To do this, I created a function called `reciprocal` in order to take reciprocal of each element of the necessary columns.
+
+```{r task2.1}
+datatable(bookmakers)
+
+odds <- all_data %>% select("HTR", "FTR","B365H","B365D","B365A","BWH","BWD","BWA","IWH","IWD","IWA","PSH","PSD","PSA","WHH","WHD","WHA", "VCH", "VCD", "VCA")
+
+reciprocal <- function(data){
+  rows <- nrow(data)
+  colns <- ncol(data)
+  recip_data <- data
+  for (i in 1:rows) {
+    for (j in 3:colns) {
+        recip_data[i,j] = 1/data[i,j]
+    }
+  }
+  return(recip_data)
+}
+
+probs <- reciprocal(odds)
+```
+
+To calculate the probabilities using normalization formula, we need to create a column of sums of odds for each bookmaker and then divide by the sum of the reciprocals of the odds.   
+
+
+```{r task2.2}
+#add sums column for each bookmaker
+probs_normalized <- probs %>% mutate(B365S=B365H+B365D+B365A, BWS=BWH+BWD+BWA, IWS=IWH+IWD+IWA, PSS=PSH+PSD+PSA, WHS=WHH+WHD+WHA, VCS=VCH+VCD+VCA) %>% transmute(HTR=HTR, FTR=FTR, B365H=B365H/B365S, B365D=B365D/B365S, B365A=B365A/B365S, BWH=BWH/BWS, BWD=BWD/BWS, BWA=BWA/BWS, IWH=IWH/IWS, IWD=IWD/IWS, IWA=IWA/IWS, PSH=PSH/PSS, PSD=PSD/PSS, PSA=PSA/PSS, WHH=WHH/WHS, WHD=WHD/WHS, WHA=WHA/WHS, VCH=VCH/VCS, VCD=VCD/VCS, VCA=VCA/VCS)
+```
+
+I created 10 bins for the normalized probabilities and then found the actual draw probabilities for each bin. In order to plot, I mapped each bin to the middle value. For example, the bin (-0.2,0] is mapped to -0.1. The following graphs show the predictions of four different bookmakers and the actual probabilities. The four bookmakers are Bet365, Bet and Win, Pinnacle and William Hill. In the plots, blue points represent the normalized probabilities given by the bookmakers and red points are the actual probabilities for the corresponding bins depending on the outcomes. 
+
+```{r task2.3a}
+#create bins for B365
+B365_probs <- probs_normalized %>% select(FTR, B365H, B365D, B365A) %>% mutate(B365_HA = B365H-B365A, bins = cut(B365_HA, breaks = seq(-1, 1, 0.2))) %>% group_by(bins) %>% mutate(actual_draw=sum(FTR=="D")/n()) %>% ungroup()
+
+B365_probs$numericbins <- as.numeric(B365_probs$bins)
+
+B365_probs$numericbins[B365_probs$numericbins==1] <- -0.9
+B365_probs$numericbins[B365_probs$numericbins==2] <- -0.7
+B365_probs$numericbins[B365_probs$numericbins==3] <- -0.6
+B365_probs$numericbins[B365_probs$numericbins==4] <- -0.5
+B365_probs$numericbins[B365_probs$numericbins==5] <- -0.3
+B365_probs$numericbins[B365_probs$numericbins==6] <- -0.1
+B365_probs$numericbins[B365_probs$numericbins==7] <- 0.1
+B365_probs$numericbins[B365_probs$numericbins==8] <- 0.5
+B365_probs$numericbins[B365_probs$numericbins==9] <- 0.7
+B365_probs$numericbins[B365_probs$numericbins==10] <- 0.9
+
+ggplot(B365_probs) + geom_point(aes(x=B365_HA, y=B365D, colour="B365"), color="blue") + geom_point(aes(x=numericbins, y=actual_draw), color="red") +  xlab("P(Home Win) – P(Away Win)") + ylab("P(Tie)") + ggtitle("Bet365") + theme(plot.title=element_text(hjust = 0.5))
+```
+
+```{r task2.3b}
+#create bins for BW
+BW_probs <- probs_normalized %>% select(FTR, BWH, BWD, BWA) %>% mutate(BW_HA = BWH-BWA, bins = cut(BW_HA, breaks = seq(-1, 1, 0.2))) %>% group_by(bins) %>% mutate(actual_draw=sum(FTR=="D")/n()) %>% ungroup()
+
+BW_probs$numericbins <- as.numeric(BW_probs$bins)
+
+BW_probs$numericbins[BW_probs$numericbins==1] <- -0.9
+BW_probs$numericbins[BW_probs$numericbins==2] <- -0.7
+BW_probs$numericbins[BW_probs$numericbins==3] <- -0.6
+BW_probs$numericbins[BW_probs$numericbins==4] <- -0.5
+BW_probs$numericbins[BW_probs$numericbins==5] <- -0.3
+BW_probs$numericbins[BW_probs$numericbins==6] <- -0.1
+BW_probs$numericbins[BW_probs$numericbins==7] <- 0.1
+BW_probs$numericbins[BW_probs$numericbins==8] <- 0.5
+BW_probs$numericbins[BW_probs$numericbins==9] <- 0.7
+BW_probs$numericbins[BW_probs$numericbins==10] <- 0.9
+
+ggplot(BW_probs) + geom_point(aes(x=BW_HA, y=BWD, colour="BW"), color="blue") + geom_point(aes(x=numericbins, y=actual_draw), color="red") +  xlab("P(Home Win) – P(Away Win)") + ylab("P(Tie)") + ggtitle("Bet and Win") + theme(plot.title=element_text(hjust = 0.5))
+```
+
+```{r task2.3c}
+#create bins for Pinnacle
+PS_probs <- probs_normalized %>% select(FTR, PSH, PSD, PSA) %>% mutate(PS_HA = PSH-PSA, bins = cut(PS_HA, breaks = seq(-1, 1, 0.2))) %>% group_by(bins) %>% mutate(actual_draw=sum(FTR=="D")/n()) %>% ungroup()
+
+PS_probs$numericbins <- as.numeric(PS_probs$bins)
+
+PS_probs$numericbins[PS_probs$numericbins==1] <- -0.9
+PS_probs$numericbins[PS_probs$numericbins==2] <- -0.7
+PS_probs$numericbins[PS_probs$numericbins==3] <- -0.6
+PS_probs$numericbins[PS_probs$numericbins==4] <- -0.5
+PS_probs$numericbins[PS_probs$numericbins==5] <- -0.3
+PS_probs$numericbins[PS_probs$numericbins==6] <- -0.1
+PS_probs$numericbins[PS_probs$numericbins==7] <- 0.1
+PS_probs$numericbins[PS_probs$numericbins==8] <- 0.5
+PS_probs$numericbins[PS_probs$numericbins==9] <- 0.7
+PS_probs$numericbins[PS_probs$numericbins==10] <- 0.9
+
+ggplot(PS_probs) + geom_point(aes(x=PS_HA, y=PSD, colour="PS"), color="blue") + geom_point(aes(x=numericbins, y=actual_draw), color="red") +  xlab("P(Home Win) – P(Away Win)") + ylab("P(Tie)") + ggtitle("Pinnacle") + theme(plot.title=element_text(hjust = 0.5))
+```
+
+```{r task2.3d}
+#create bins for William Hill
+WH_probs <- probs_normalized %>% select(FTR, WHH, WHD, WHA) %>% mutate(WH_HA = WHH-WHA, bins = cut(WH_HA, breaks = seq(-1, 1, 0.2))) %>% group_by(bins) %>% mutate(actual_draw=sum(FTR=="D")/n()) %>% ungroup()
+
+WH_probs$numericbins <- as.numeric(WH_probs$bins)
+
+WH_probs$numericbins[WH_probs$numericbins==1] <- -0.9
+WH_probs$numericbins[WH_probs$numericbins==2] <- -0.7
+WH_probs$numericbins[WH_probs$numericbins==3] <- -0.6
+WH_probs$numericbins[WH_probs$numericbins==4] <- -0.5
+WH_probs$numericbins[WH_probs$numericbins==5] <- -0.3
+WH_probs$numericbins[WH_probs$numericbins==6] <- -0.1
+WH_probs$numericbins[WH_probs$numericbins==7] <- 0.1
+WH_probs$numericbins[WH_probs$numericbins==8] <- 0.5
+WH_probs$numericbins[WH_probs$numericbins==9] <- 0.7
+WH_probs$numericbins[WH_probs$numericbins==10] <- 0.9
+
+ggplot(WH_probs) + geom_point(aes(x=WH_HA, y=WHD, colour="WH"), color="blue") + geom_point(aes(x=numericbins, y=actual_draw), color="red") +  xlab("P(Home Win) – P(Away Win)") + ylab("P(Tie)") + ggtitle("William Hill") + theme(plot.title=element_text(hjust = 0.5))
+```
+
+According to the graphs, for most of the times, bookmakers thought there was a high probability of tie. This result is obtained from the blue points being above the red ones. Remember, blue means bookmakers prediction and red ones were the actual probabilities. When the red point is above the blue ones, one can potentially make money by betting on "Draw" for the games in the corresponding bin 
+
+
+### Task 3:
+
+Half time result has a huge effect on the full time result. Therefore, I will remove the matches having tie as the half time result. This can be done by simply using a `filter` function for the half time result.
+
+
+```{r task3a}
+#create bins for B365
+B365_probs <- probs_normalized %>% select(HTR, FTR, B365H, B365D, B365A) %>% filter(HTR!="D") %>% mutate(B365_HA = B365H-B365A, bins = cut(B365_HA, breaks = seq(-1, 1, 0.2))) %>% group_by(bins) %>% mutate(actual_draw=sum(FTR=="D")/n()) %>% ungroup()
+
+B365_probs$numericbins <- as.numeric(B365_probs$bins)
+
+B365_probs$numericbins[B365_probs$numericbins==1] <- -0.9
+B365_probs$numericbins[B365_probs$numericbins==2] <- -0.7
+B365_probs$numericbins[B365_probs$numericbins==3] <- -0.6
+B365_probs$numericbins[B365_probs$numericbins==4] <- -0.5
+B365_probs$numericbins[B365_probs$numericbins==5] <- -0.3
+B365_probs$numericbins[B365_probs$numericbins==6] <- -0.1
+B365_probs$numericbins[B365_probs$numericbins==7] <- 0.1
+B365_probs$numericbins[B365_probs$numericbins==8] <- 0.5
+B365_probs$numericbins[B365_probs$numericbins==9] <- 0.7
+B365_probs$numericbins[B365_probs$numericbins==10] <- 0.9
+
+ggplot(B365_probs) + geom_point(aes(x=B365_HA, y=B365D, colour="B365"), color="blue") + geom_point(aes(x=numericbins, y=actual_draw), color="red") +  xlab("P(Home Win) – P(Away Win)") + ylab("P(Tie)") + ggtitle("Bet365") + theme(plot.title=element_text(hjust = 0.5))
+```
+
+```{r task3b}
+#create bins for BW
+BW_probs <- probs_normalized %>% select(HTR, FTR, BWH, BWD, BWA) %>% filter(HTR!="D") %>% mutate(BW_HA = BWH-BWA, bins = cut(BW_HA, breaks = seq(-1, 1, 0.2))) %>% group_by(bins) %>% mutate(actual_draw=sum(FTR=="D")/n()) %>% ungroup()
+
+BW_probs$numericbins <- as.numeric(BW_probs$bins)
+
+BW_probs$numericbins[BW_probs$numericbins==1] <- -0.9
+BW_probs$numericbins[BW_probs$numericbins==2] <- -0.7
+BW_probs$numericbins[BW_probs$numericbins==3] <- -0.6
+BW_probs$numericbins[BW_probs$numericbins==4] <- -0.5
+BW_probs$numericbins[BW_probs$numericbins==5] <- -0.3
+BW_probs$numericbins[BW_probs$numericbins==6] <- -0.1
+BW_probs$numericbins[BW_probs$numericbins==7] <- 0.1
+BW_probs$numericbins[BW_probs$numericbins==8] <- 0.5
+BW_probs$numericbins[BW_probs$numericbins==9] <- 0.7
+BW_probs$numericbins[BW_probs$numericbins==10] <- 0.9
+
+ggplot(BW_probs) + geom_point(aes(x=BW_HA, y=BWD, colour="BW"), color="blue") + geom_point(aes(x=numericbins, y=actual_draw), color="red") +  xlab("P(Home Win) – P(Away Win)") + ylab("P(Tie)") + ggtitle("Bet and Win") + theme(plot.title=element_text(hjust = 0.5))
+```
+
+
+```{r task3c}
+#create bins for Pinnacle
+PS_probs <- probs_normalized %>% select(HTR, FTR, PSH, PSD, PSA) %>% filter(HTR!="D") %>% mutate(PS_HA = PSH-PSA, bins = cut(PS_HA, breaks = seq(-1, 1, 0.2))) %>% group_by(bins) %>% mutate(actual_draw=sum(FTR=="D")/n()) %>% ungroup()
+
+PS_probs$numericbins <- as.numeric(PS_probs$bins)
+
+PS_probs$numericbins[PS_probs$numericbins==1] <- -0.9
+PS_probs$numericbins[PS_probs$numericbins==2] <- -0.7
+PS_probs$numericbins[PS_probs$numericbins==3] <- -0.6
+PS_probs$numericbins[PS_probs$numericbins==4] <- -0.5
+PS_probs$numericbins[PS_probs$numericbins==5] <- -0.3
+PS_probs$numericbins[PS_probs$numericbins==6] <- -0.1
+PS_probs$numericbins[PS_probs$numericbins==7] <- 0.1
+PS_probs$numericbins[PS_probs$numericbins==8] <- 0.5
+PS_probs$numericbins[PS_probs$numericbins==9] <- 0.7
+PS_probs$numericbins[PS_probs$numericbins==10] <- 0.9
+
+ggplot(PS_probs) + geom_point(aes(x=PS_HA, y=PSD, colour="PS"), color="blue") + geom_point(aes(x=numericbins, y=actual_draw), color="red") +  xlab("P(Home Win) – P(Away Win)") + ylab("P(Tie)") + ggtitle("Pinnacle") + theme(plot.title=element_text(hjust = 0.5))
+```
+
+```{r task3d}
+#create bins for William Hill
+WH_probs <- probs_normalized %>% select(HTR, FTR, WHH, WHD, WHA) %>% filter(HTR!="D") %>% mutate(WH_HA = WHH-WHA, bins = cut(WH_HA, breaks = seq(-1, 1, 0.2))) %>% group_by(bins) %>% mutate(actual_draw=sum(FTR=="D")/n()) %>% ungroup()
+
+WH_probs$numericbins <- as.numeric(WH_probs$bins)
+
+WH_probs$numericbins[WH_probs$numericbins==1] <- -0.9
+WH_probs$numericbins[WH_probs$numericbins==2] <- -0.7
+WH_probs$numericbins[WH_probs$numericbins==3] <- -0.6
+WH_probs$numericbins[WH_probs$numericbins==4] <- -0.5
+WH_probs$numericbins[WH_probs$numericbins==5] <- -0.3
+WH_probs$numericbins[WH_probs$numericbins==6] <- -0.1
+WH_probs$numericbins[WH_probs$numericbins==7] <- 0.1
+WH_probs$numericbins[WH_probs$numericbins==8] <- 0.5
+WH_probs$numericbins[WH_probs$numericbins==9] <- 0.7
+WH_probs$numericbins[WH_probs$numericbins==10] <- 0.9
+
+ggplot(WH_probs) + geom_point(aes(x=WH_HA, y=WHD, colour="WH"), color="blue") + geom_point(aes(x=numericbins, y=actual_draw), color="red") +  xlab("P(Home Win) – P(Away Win)") + ylab("P(Tie)") + ggtitle("William Hill") + theme(plot.title=element_text(hjust = 0.5))
+```
+
+
+
+### References
+
+[1] Jonas Mirza and Niklas Fejes,2016, “Statistical Football Modeling A Study of Football Betting and Implementation of Statistical Algorithms in Premier League”, available online: http://www.it.uu.se/edu/course/homepage/projektTDB/ht15/project16/Project16_Report.pdf
+
+[2] Štrumbelj, E., 2014. On determining probability forecasts from betting odds. International journal of forecasting, 30(4), pp.934-943.
+
+[3] Shin, H.S., 1993. Measuring the incidence of insider trading in a market for state-contingent claims. The Economic Journal, 103(420), pp.1141-1153.
+
+[4] Data: https://www.football-data.co.uk/englandm.php
+
