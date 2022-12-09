@@ -3,6 +3,7 @@
 ## Statistics & Data Science:
 *	Introduction to Probability & Statistics w/ Ümit Işlak ([MATH 344](/Syllabus/MATH344.pdf))
 * Introduction to Data Science for Business w/ Kemal Ünaltuna ([AD 588](/Syllabus/AD588.pdf)) \
+Fundamentals of machine learning and optimization theory \
 [**Project Report**](/ProjectswoJournal/AD588Report.pdf)
 *	Statistics for Industrial Engineers w/ Refik Güllü ([IE 256](/Syllabus/IE256.pdf))
 *	Selected Topics in Essentials of Data Analytics w/ Berk Orbay ([IE 48A](/Syllabus/IE48A.pdf)) \
