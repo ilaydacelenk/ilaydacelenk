@@ -1,4 +1,4 @@
-## My Master's Thesis
+## Master's Thesis
 
 Abstract
 
