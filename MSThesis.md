@@ -1,5 +1,11 @@
 ## Master's Thesis
 
-Abstract
+My thesis is approved. This page will be updated after publishing.
 
-Related scripts are going to be available here.
+Abstract.
+
+Thesis.
+
+Related scripts.
+
+Example data sets.
