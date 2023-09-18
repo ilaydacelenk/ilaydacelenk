@@ -5,6 +5,6 @@ In this research, alternative representations of the grid based Numerical Weathe
 
 
 [Thesis](/MS_Thesis/Ms_Thesis.pdf) \
-[Related scripts](/MS_Thesis/codes) \
+[Related scripts](https://github.com/ilaydacelenk/ilaydacelenk.github.io/tree/master/MS_Thesis/codes) \
 [Example datasets](/MS_Thesis/datasets)
 
