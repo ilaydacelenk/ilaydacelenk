@@ -1,6 +1,6 @@
 ## Teaching
 
-I am currently working as a research & teaching assistant in Industrial Engineering Department at Boğaziçi University. My responsibilities include conducting weekly problem solving sessions, preparing / grading quizzes, homework assignments and term projects.
+During my time as a research and teaching assistant in the Industrial Engineering Department at Boğaziçi University, I took on diverse responsibilities. These included leading weekly problem-solving sessions, preparing/grading quizzes and homework assignments. Further details regarding these courses can be found below.
 
 * Operations Research I w/ Kerem Can Özkısacık, Ali Tamer Ünal ([IE 310](/Syllabus/IE310_.pdf))
 * Operations Research I w/ Tınaz Ekim Aşıcı ([IE 202](/Syllabus/IE202.pdf))
