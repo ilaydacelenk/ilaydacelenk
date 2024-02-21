@@ -4,7 +4,7 @@ During my time as a research and teaching assistant in the Industrial Engineerin
 
 2020/2021-1 Fall:
 * Operations Research I w/ Kerem Can Özkısacık ([IE 310](/Syllabus/fall20-310.pdf)) \
-I conducted the last three Problem Solving Sessions.\
+I conducted the last three Problem Solving Sessions.
 
 2020/2021-2 Spring:
 * Materials and Processes in Manufacturing w/ Osman Gökhan Ersoy ([IE 220](/Syllabus/spring21-220.pdf)) \ Evaluation of homework assingments.  
