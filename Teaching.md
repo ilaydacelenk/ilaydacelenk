@@ -47,7 +47,7 @@ Evaluation of homework assignments.
 Evaluation of homework assignments.
 
 
-Note:
+**Notes:**
 * In the operations research (OR) courses, I prepared several homework assignments involving utilization of PuLP and CVXPY packages in Python. 
 * In Mustafa Gökçe Baydoğan's courses, students engaged with real-time series data for their term projects, tasked with predicting values for the next day's time period. To facilitate daily assessments, I contributed to creating an automated project evaluation system leveraging Google API within Python. This system empowered students to access their daily performance rankings, fostering iterative improvements in their methodologies. Initially implemented in the Fall semester of 2021/2022-1, the system proved instrumental and continued to be utilized in subsequent semesters.
 
