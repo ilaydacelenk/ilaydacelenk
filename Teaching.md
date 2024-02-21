@@ -3,7 +3,7 @@
 During my time as a research and teaching assistant in the Industrial Engineering Department at Boğaziçi University, I took on diverse responsibilities. These included leading weekly problem-solving sessions, preparing/grading quizzes and homework assignments. In addition to the course work, I participated in a team for evaluating the internship reports of undergraduate students. Further details regarding the courses can be found below.
 
 2020/2021-1 Fall:
-* Operations Research I w/ Kerem Can Özkısacık ([IE 310](/Syllabus/fall20-310.pdf)) 
+* Operations Research I w/ Kerem Can Özkısacık ([IE 310](/Syllabus/fall20-310.pdf)) \\
 I conducted the last three Problem Solving Sessions.
 
 2020/2021-2 Spring:
