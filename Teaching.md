@@ -17,17 +17,17 @@ Holding weekly Problem Solving Sessions, preparation/evaluation of homework assi
 Holding weekly Problem Solving Sessions, preparation/evaluation of quizzes and homework assignments.
 *	Special Topics in Time Series Analytics w/ Mustafa Gökçe Baydoğan ([IE 48B](/Syllabus/fall21-48b.pdf)) \\
 Evaluation of homework assignments.  
-*	Statistical Learning for Data Mining w/ Mustafa Gökçe Baydoğan ([IE 582](/Syllabus/fall21-582.pdf)) 
+*	Statistical Learning for Data Mining w/ Mustafa Gökçe Baydoğan ([IE 582](/Syllabus/fall21-582.pdf)) \\
 Evaluation of homework assignments.  
 
 **2021/2022-2 Spring:**
-*	Statistical Forecasting and Time Series w/ Mustafa Gökçe Baydoğan ([IE 360](/Syllabus/spring22-360.pdf))
+*	Statistical Forecasting and Time Series w/ Mustafa Gökçe Baydoğan ([IE 360](/Syllabus/spring22-360.pdf)) \\
 Evaluation of homework assignments.  
-*	Statistical Inference w/ Wolfgang Hörmann ([IE 508](/Syllabus/spring22-508.pdf)) 
+*	Statistical Inference w/ Wolfgang Hörmann ([IE 508](/Syllabus/spring22-508.pdf)) \\
 Holding regular Problem Solving Sessions.
 
 **2022/2023-1 Fall:**
-* Operations Research I w/ Tınaz Ekim Aşıcı ([IE 202](/Syllabus/fall22-202.pdf))
+* Operations Research I w/ Tınaz Ekim Aşıcı ([IE 202](/Syllabus/fall22-202.pdf)) \\
 Holding weekly Problem Solving Sessions, preparation/evaluation of quizzes and homework assignments.
 * Operations Research II w/ Necati Aras ([IE 203](/Syllabus/fall22-203.pdf)) \\
 Holding weekly Problem Solving Sessions, preparation/evaluation of homework assignments.
@@ -43,7 +43,7 @@ Preparation of Quizzes & homework assignments with rubrics.
 Holding weekly Problem Solving Sessions, evaluation of homework assignments.
 *	Statistical Learning for Data Mining w/ Mustafa Gökçe Baydoğan ([IE 582](/Syllabus/fall23-582.pdf))
 Evaluation of homework assignments.
-*	Python Programming for Financial Engineering ([FE 588](/Syllabus/fall23-588.pdf))
+*	Python Programming for Financial Engineering ([FE 588](/Syllabus/fall23-588.pdf)) \\
 Evaluation of homework assignments.
 
 
