@@ -33,7 +33,7 @@ Holding weekly Problem Solving Sessions, preparation/evaluation of quizzes and h
 Holding weekly Problem Solving Sessions, preparation/evaluation of homework assignments.
 
 **2022/2023-2 Spring:**
-* Operations Research II w/ Z. Caner Taşkın ([IE 203](/Syllabus/spring-203.pdf)) \\
+* Operations Research II w/ Z. Caner Taşkın ([IE 203](/Syllabus/spring23-203.pdf)) \\
 Holding weekly Problem Solving Sessions, preparation/evaluation of quizzes and homework assignments.
 
 **2023/2024-1 Fall:**
