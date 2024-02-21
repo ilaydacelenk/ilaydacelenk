@@ -43,7 +43,7 @@ Preparation of Quizzes & homework assignments with rubrics.
 Holding weekly Problem Solving Sessions, evaluation of homework assignments.
 *	Statistical Learning for Data Mining w/ Mustafa Gökçe Baydoğan ([IE 582](/Syllabus/fall23-582.pdf)) \\
 Evaluation of homework assignments.
-*	Python Programming for Financial Engineering ([FE 588](/Syllabus/fall23-588.pdf)) \\
+*	Python Programming for Financial Engineering ([FE 588](/Syllabus/fall23-fe588.pdf)) \\
 Evaluation of homework assignments.
 
 
