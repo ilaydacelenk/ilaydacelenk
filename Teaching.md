@@ -4,17 +4,17 @@ During my time as a research and teaching assistant in the Industrial Engineerin
 
 **2020/2021-1 Fall:**
 * Operations Research I w/ Kerem Can Özkısacık ([IE 310](/Syllabus/fall20-310.pdf)) \\
-Last three Problem Solving Sessions.
+Last three problem-solving sessions.
 
 **2020/2021-2 Spring:**
 * Materials and Processes in Manufacturing w/ Osman Gökhan Ersoy ([IE 220](/Syllabus/spring21-220.pdf)) \\
 Evaluation of homework assignments.  
 * Operations Research I w/ Ali Tamer Ünal ([IE 310](/Syllabus/spring21-310.pdf)) \\
-Holding weekly Problem Solving Sessions, preparation/evaluation of homework assignments.
+Holding weekly problem-solving sessions, preparation/evaluation of homework assignments.
 
 **2021/2022-1 Fall:**
 * Operations Research I w/ Kerem Can Özkısacık ([IE 310](/Syllabus/fall21-310.pdf)) \\
-Holding weekly Problem Solving Sessions, preparation/evaluation of quizzes and homework assignments.
+Holding weekly problem-solving sessions, preparation/evaluation of quizzes and homework assignments.
 *	Special Topics in Time Series Analytics w/ Mustafa Gökçe Baydoğan ([IE 48B](/Syllabus/fall21-48b.pdf)) \\
 Evaluation of homework assignments.  
 *	Statistical Learning for Data Mining w/ Mustafa Gökçe Baydoğan ([IE 582](/Syllabus/fall21-582.pdf)) \\
@@ -24,23 +24,23 @@ Evaluation of homework assignments.
 *	Statistical Forecasting and Time Series w/ Mustafa Gökçe Baydoğan ([IE 360](/Syllabus/spring22-360.pdf)) \\
 Evaluation of homework assignments.  
 *	Statistical Inference w/ Wolfgang Hörmann ([IE 508](/Syllabus/spring22-508.pdf)) \\
-Holding regular Problem Solving Sessions.
+Holding regular problem-solving sessions.
 
 **2022/2023-1 Fall:**
 * Operations Research I w/ Tınaz Ekim Aşıcı ([IE 202](/Syllabus/fall22-202.pdf)) \\
-Holding weekly Problem Solving Sessions, preparation/evaluation of quizzes and homework assignments.
+Holding weekly problem-solving sessions, preparation/evaluation of quizzes and homework assignments.
 * Operations Research II w/ Necati Aras ([IE 203](/Syllabus/fall22-203.pdf)) \\
-Holding weekly Problem Solving Sessions, preparation/evaluation of homework assignments.
+Holding weekly problem-solving sessions, preparation/evaluation of homework assignments.
 
 **2022/2023-2 Spring:**
 * Operations Research II w/ Z. Caner Taşkın ([IE 203](/Syllabus/spring23-203.pdf)) \\
-Holding weekly Problem Solving Sessions, preparation/evaluation of quizzes and homework assignments.
+Holding weekly problem-solving sessions, preparation/evaluation of quizzes and homework assignments.
 
 **2023/2024-1 Fall:**
 * Operations Research I w/ Kerem Can Özkısacık ([IE 310](/Syllabus/fall23-310.pdf)) \\
-Preparation of Quizzes & homework assignments with rubrics.
+Preparation of quizzes & homework assignments with rubrics.
 *	Quality Engineering w/ Mustafa Gökçe Baydoğan ([IE 423](/Syllabus/fall23-423.pdf)) \\
-Holding weekly Problem Solving Sessions, evaluation of homework assignments.
+Holding weekly problem-solving sessions, evaluation of homework assignments.
 *	Statistical Learning for Data Mining w/ Mustafa Gökçe Baydoğan ([IE 582](/Syllabus/fall23-582.pdf)) \\
 Evaluation of homework assignments.
 *	Python Programming for Financial Engineering ([FE 588](/Syllabus/fall23-fe588.pdf)) \\
