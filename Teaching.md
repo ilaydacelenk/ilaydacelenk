@@ -7,15 +7,15 @@ During my time as a research and teaching assistant in the Industrial Engineerin
 I conducted the last three Problem Solving Sessions.
 
 2020/2021-2 Spring:
-* Materials and Processes in Manufacturing w/ Osman Gökhan Ersoy ([IE 220](/Syllabus/spring21-220.pdf))  
+* Materials and Processes in Manufacturing w/ Osman Gökhan Ersoy ([IE 220](/Syllabus/spring21-220.pdf)) \\
 Evaluation of homework assignments.  
-* Operations Research I w/ Ali Tamer Ünal ([IE 310](/Syllabus/spring21-310.pdf))  
+* Operations Research I w/ Ali Tamer Ünal ([IE 310](/Syllabus/spring21-310.pdf)) \\
 I was responsible from weekly Problem Solving Sessions, preparation/evaluation of homework assignments.
 
 2021/2022-1 Fall:
-* Operations Research I w/ Kerem Can Özkısacık ([IE 310](/Syllabus/fall21-310.pdf))
+* Operations Research I w/ Kerem Can Özkısacık ([IE 310](/Syllabus/fall21-310.pdf)) \\
 I was responsible from weekly Problem Solving Sessions, preparation/evaluation of quizzes and homework assignments.
-*	Special Topics in Time Series Analytics w/ Mustafa Gökçe Baydoğan ([IE 48B](/Syllabus/fall21-48b.pdf))
+*	Special Topics in Time Series Analytics w/ Mustafa Gökçe Baydoğan ([IE 48B](/Syllabus/fall21-48b.pdf)) \\
 I contributed to creating an automated project evaluation system using Google API in Python, allowing students to see their daily performance rankings and improve their approach on a daily updated power production data set.
 *	Statistical Learning for Data Mining w/ Mustafa Gökçe Baydoğan ([IE 582](/Syllabus/fall21-582.pdf)) 
 
@@ -25,14 +25,14 @@ I contributed to creating an automated project evaluation system using Google AP
 
 2022/2023-1 Fall:
 * Operations Research I w/ Tınaz Ekim Aşıcı ([IE 202](/Syllabus/fall22-202.pdf))
-* Operations Research II w/ Necati Aras ([IE 203](/Syllabus/fall22-203.pdf)) 
+* Operations Research II w/ Necati Aras ([IE 203](/Syllabus/fall22-203.pdf)) \\
 For the OR courses, I also prepared several homework assignments involving usage of PuLP and CVXPY packages in Python. 
 
 2022/2023-2 Spring:
 * Operations Research II w/ Z. Caner Taşkın ([IE 203](/Syllabus/spring-203.pdf)) 
 
 2023/2024-1 Fall:
-* Operations Research I w/ Kerem Can Özkısacık ([IE 310](/Syllabus/fall23-310.pdf))
+* Operations Research I w/ Kerem Can Özkısacık ([IE 310](/Syllabus/fall23-310.pdf)) \\
 Preparation of Quizzes & homework assignments with rubrics.
 *	Quality Engineering w/ Mustafa Gökçe Baydoğan ([IE 423](/Syllabus/fall23-582.pdf))
 *	Statistical Learning for Data Mining w/ Mustafa Gökçe Baydoğan ([IE 423](/Syllabus/fall23-423.pdf))
