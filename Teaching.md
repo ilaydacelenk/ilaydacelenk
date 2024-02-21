@@ -41,7 +41,7 @@ Holding weekly Problem Solving Sessions, preparation/evaluation of quizzes and h
 Preparation of Quizzes & homework assignments with rubrics.
 *	Quality Engineering w/ Mustafa Gökçe Baydoğan ([IE 423](/Syllabus/fall23-423.pdf)) \\
 Holding weekly Problem Solving Sessions, evaluation of homework assignments.
-*	Statistical Learning for Data Mining w/ Mustafa Gökçe Baydoğan ([IE 582](/Syllabus/fall23-582.pdf))
+*	Statistical Learning for Data Mining w/ Mustafa Gökçe Baydoğan ([IE 582](/Syllabus/fall23-582.pdf)) \\
 Evaluation of homework assignments.
 *	Python Programming for Financial Engineering ([FE 588](/Syllabus/fall23-588.pdf)) \\
 Evaluation of homework assignments.
