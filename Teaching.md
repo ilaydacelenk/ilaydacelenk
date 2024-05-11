@@ -1,8 +1,8 @@
 ## Teaching
 
-# Bogazici University:
-
 During my time as a teaching assistant in the Industrial Engineering Department at Boğaziçi University, I took on diverse responsibilities. These included leading weekly problem-solving sessions, preparing/grading quizzes and homework assignments. In addition to the course work, I participated in a team for evaluating the internship reports of undergraduate students. Further details regarding the courses can be found below.
+
+### Bogazici University:
 
 **2020/2021-1 Fall:**
 * Operations Research I w/ Kerem Can Özkısacık ([IE 310](/Syllabus/fall20-310.pdf)) \\
