@@ -27,6 +27,6 @@ Nonlinear optimization techniques for graphs in economics.
 *	Stochastic Processes And Applications by Aybek Korugan ([IE 505](/Syllabus/IE505.pdf))
 * Systems Theory by Gönenç Yücel ([IE 533](/Syllabus/IE533.pdf))
 
-## [LNMB]((https://www.lnmb.nl/):
+## [LNMB](https://www.lnmb.nl/):
 * Stochastic Programming by Ward Romeijnders
 * Robust Optimization by Frans de Ruiter and Ahmadreza Marandi
