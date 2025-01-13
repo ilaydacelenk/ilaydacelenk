@@ -1,8 +1,10 @@
-## Teaching
+## Teaching and Supervising
 
-During my time as a teaching assistant in the Industrial Engineering Department at Boğaziçi University, I took on diverse responsibilities. These included leading weekly problem-solving sessions, preparing/grading quizzes and homework assignments. In addition to the course work, I participated in a team for evaluating the internship reports of undergraduate students. Further details regarding the courses can be found below.
+During my time as a teaching assistant, I took on diverse responsibilities. These included leading weekly problem-solving sessions, preparing/grading quizzes and homework assignments. In addition to the course work, I participated in a team for evaluating the internship reports of undergraduate students. In TU/e, I also supervised bachelor students with their Bachelor End Projects (BEP).
+Further details regarding the courses can be found below.
 
-### Bogazici University:
+
+### Bogazici University (BOUN):
 
 **2020/2021-1 Fall:**
 * Operations Research I w/ Kerem Can Özkısacık ([IE 310](/Syllabus/fall20-310.pdf)) \\
@@ -46,6 +48,12 @@ Holding weekly problem-solving sessions, evaluation of homework assignments.
 *	Statistical Learning for Data Mining w/ Mustafa Gökçe Baydoğan ([IE 582](/Syllabus/fall23-582.pdf)) \\
 Evaluation of homework assignments.
 *	Python Programming for Financial Engineering ([FE 588](/Syllabus/fall23-fe588.pdf)) \\
+Evaluation of homework assignments.
+
+### Eindhoven University of Technology (TU/e) :
+
+**2024-2025 Semester A-Quarter 2:** 
+* Robust Decision Making w/ Ahmadreza Marandi
 Evaluation of homework assignments.
 
 
